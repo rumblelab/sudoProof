@@ -32,6 +32,20 @@ class BitcoinProofOfFunds:
 
     _BECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
     _BECH32M_CONST = 0x2bc830a3
+    
+    @staticmethod
+    def _parse_header_byte(h: int):                                                     
+        """
+        Break the 65-byte message-signature header into its BIP-137 fields.
+
+        Returns (recid, is_compressed, is_segwit, is_taproot)
+        """
+        flags = h - 27
+        recid         =  flags        & 0b11          # 0-3
+        is_compressed = (flags >> 2)  & 0b1           # bit 2
+        is_segwit     = (flags >> 3)  & 0b1           # bit 3
+        is_taproot    = (flags >> 4)  & 0b1           # bit 4
+        return recid, bool(is_compressed), bool(is_segwit), bool(is_taproot)                
 
     @staticmethod
     def _bech32_polymod(values: List[int]) -> int:
@@ -122,42 +136,56 @@ class BitcoinProofOfFunds:
             return False
 
     @staticmethod
-    def _verify_bitcoin_message_signature(address: str, signature: str, message: str) -> bool:
+    def _verify_bitcoin_message_signature(address: str,
+                                        signature: str,
+                                        message: str) -> bool:
         """Perform full Bitcoin message signature verification."""
         try:
-            formatted_message = BitcoinProofOfFunds._format_message_for_signing(message)
-            message_hash = BitcoinProofOfFunds._double_sha256(formatted_message)
+            # 1️⃣  Hash the “Bitcoin Signed Message” payload
+            formatted = BitcoinProofOfFunds._format_message_for_signing(message)
+            msg_hash  = BitcoinProofOfFunds._double_sha256(formatted)
 
+            # 2️⃣  Decode and sanity-check the compact signature
             try:
                 sig_bytes = base64.b64decode(signature)
             except Exception as e:
                 logger.warning(f"Invalid base64 signature: {e}")
                 return False
-
             if len(sig_bytes) != 65:
                 logger.warning(f"Invalid signature length: {len(sig_bytes)} (expected 65)")
                 return False
 
-            recovery_flag = sig_bytes[0]
-            r = int.from_bytes(sig_bytes[1:33], 'big')
+            # 3️⃣  Split it into header, r, s
+            header = sig_bytes[0]
+            r = int.from_bytes(sig_bytes[1:33],  'big')
             s = int.from_bytes(sig_bytes[33:65], 'big')
 
-            # The recovery flag also tells us if the key was compressed
-            is_compressed = (recovery_flag - 27) & 4 != 0
-
-            recovered_pubkey = BitcoinProofOfFunds._recover_public_key(message_hash, r, s, recovery_flag)
-            
+            # 4️⃣  Recover the public key point
+            recovered_pubkey = BitcoinProofOfFunds._recover_public_key(
+                msg_hash, r, s, header
+            )
             if not recovered_pubkey:
-                logger.warning("❌ Public key recovery failed.")
+                logger.warning("❌ Public-key recovery failed.")
                 return False
 
-            recovered_addresses = BitcoinProofOfFunds._pubkey_to_addresses(recovered_pubkey, is_compressed)
-            if address in recovered_addresses:
+            # 5️⃣  Build every address that key can map to
+            recovered_addresses_all = (
+                BitcoinProofOfFunds._pubkey_to_addresses(recovered_pubkey, True)  +
+                BitcoinProofOfFunds._pubkey_to_addresses(recovered_pubkey, False)
+            )
+            recovered_addresses_all = list(dict.fromkeys(recovered_addresses_all))  # dedupe
+
+            # 6️⃣  Check for a match
+            if address in recovered_addresses_all:
                 logger.info(f"✅ Address match found! Signature for {address} is valid.")
                 return True
 
-            logger.warning(f"❌ No address match found for {address}. Recovered addresses: {recovered_addresses}. Signature is invalid.")
+            logger.warning(
+                f"❌ No address match found for {address}. "
+                f"Recovered addresses: {recovered_addresses_all}. Signature is invalid."
+            )
             return False
+
         except Exception as e:
             logger.error(f"Bitcoin message verification error: {e}", exc_info=True)
             return False
@@ -188,7 +216,7 @@ class BitcoinProofOfFunds:
     @staticmethod
     def _recover_public_key(message_hash: bytes, r: int, s: int, recovery_flag: int) -> Optional[Point]:
         """Recovers the public key from an ECDSA signature."""
-        if not (27 <= recovery_flag <= 34):
+        if not (27 <= recovery_flag <= 42):
             logger.warning(f"Invalid recovery flag: {recovery_flag}")
             return None
 
@@ -332,7 +360,7 @@ class BitcoinProofOfFunds:
         if address.startswith('1') and 26 <= len(address) <= 35: return True
         if address.startswith('3') and 26 <= len(address) <= 35: return True
         if address.startswith('bc1q') and 42 <= len(address) <= 62: return True
-        if address.startswith('bc1p') and 62 <= len(address) <= 66: return True
+        if address.startswith('bc1p') and 42 <= len(address) <= 66: return True
         if address.startswith(('m', 'n', '2', 'tb1')): return True
         return False
 

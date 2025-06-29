@@ -1,0 +1,10 @@
+flask==3.0.0
+flask-cors==4.0.0
+bitcoinlib==0.6.15
+python-bitcoinrpc==1.0
+redis==5.0.1
+sqlalchemy==2.0.23
+flask-sqlalchemy==3.1.1
+python-dotenv==1.0.0
+ecdsa==0.18.0
+requests==2.31.0

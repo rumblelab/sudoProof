@@ -365,18 +365,32 @@ class BitcoinProofOfFunds:
         return False
 
     @staticmethod
-    def create_proof_message(addresses: list, amount: Union[int, float], timestamp: Optional[str] = None) -> str:
-        """Create a standardized proof of funds message."""
+    def create_proof_message(
+        addresses: list, 
+        amount: Union[int, float], 
+        proof_name: Optional[str] = None, 
+        timestamp: Optional[str] = None
+    ) -> str:
+        """Create a standardized proof of funds message, optionally including a proof name."""
         if timestamp is None:
             # Use timezone-aware UTC datetime to avoid DeprecationWarning
             timestamp = datetime.now(timezone.utc).isoformat()
+        
         amount_str = f"{float(amount):.8f}"
-        message_lines = [
-            "Proof of Funds",
+        
+        # Start with the purpose of the proof, making it more specific
+        message_lines = []
+        if proof_name and proof_name.strip():
+            message_lines.append(f"Proof of Funds For: {proof_name.strip()}")
+        else:
+            message_lines.append("Proof of Funds")
+            
+        message_lines.extend([
             f"Timestamp: {timestamp}",
             f"Total Amount: {amount_str} BTC",
             "Addresses:"
-        ] + [f"- {addr}" for addr in addresses]
+        ] + [f"- {addr}" for addr in addresses])
+        
         return "\n".join(message_lines)
 
     @staticmethod

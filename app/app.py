@@ -65,6 +65,7 @@ def create_proof():
     try:
         data = request.json
         addresses = data.get('addresses', [])
+        proof_name = data.get('proof_name')  # <-- ADDED
         
         if not addresses:
             return jsonify({'error': 'No addresses provided'}), 400
@@ -74,10 +75,12 @@ def create_proof():
         total_amount = sum([addr.get('balance', 0) for addr in addresses])
         address_list = [addr['address'] for addr in addresses]
         
+        # Pass the proof_name to the message creation function
         message = BitcoinProofOfFunds.create_proof_message(
             address_list, 
-            total_amount, 
-            timestamp.isoformat()
+            total_amount,
+            proof_name=proof_name,  # <-- ADDED
+            timestamp=timestamp.isoformat()
         )
         
         # Generate proof ID

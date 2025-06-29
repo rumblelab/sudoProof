@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="utf-t" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Bitcoin Proof of Funds</title>
   <script src="https://unpkg.com/htmx.org@1.9.11"></script>
@@ -15,7 +15,6 @@
     <p class="text-sm text-slate-500 mt-1">Supports Legacy (1...), P2SH (3...), and SegWit (bc1...) addresses</p>
   </header>
 
-  <!-- ───────────── Proof Configuration ───────────── -->
   <section id="proof-form" class="w-full max-w-4xl bg-white shadow rounded-xl p-6 mb-6">
     <h2 class="font-semibold mb-4">📝 Proof Configuration</h2>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -28,7 +27,7 @@
       <div>
         <label class="block text-sm font-medium text-slate-700 mb-1">Proof Name</label>
         <input id="proof-name" name="proof_name" type="text" required 
-               placeholder="e.g., Series A Investment Fund"
+               placeholder="e.g.,Buyer Qualification for J. Doe."
                class="w-full rounded-lg border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-indigo-500" />
       </div>
       <div>
@@ -39,7 +38,6 @@
     </div>
   </section>
 
-  <!-- ───────────── Progress & Actions ───────────── -->
   <section class="w-full max-w-4xl flex items-center justify-between mb-6">
     <div class="flex items-center space-x-4 flex-1">
       <div class="flex-1 bg-slate-200 rounded-full h-4 relative overflow-hidden">
@@ -63,7 +61,6 @@
     </div>
   </section>
 
-  <!-- ───────────── Proof Table ───────────── -->
   <section class="w-full max-w-4xl bg-white shadow rounded-xl overflow-hidden mb-6">
     <table class="w-full text-sm">
       <thead class="bg-slate-100 border-b">
@@ -77,11 +74,9 @@
         </tr>
       </thead>
       <tbody id="rows-body" class="divide-y divide-slate-200">
-        <!-- Rows populated via JavaScript -->
-      </tbody>
+        </tbody>
     </table>
     
-    <!-- Empty state -->
     <div id="empty-state" class="p-12 text-center text-slate-500">
       <div class="mb-4 text-4xl">🏛️</div>
       <div class="text-xl font-medium mb-2 text-slate-700">No addresses added yet</div>
@@ -89,12 +84,10 @@
     </div>
   </section>
 
-  <!-- ───────────── Address Composer ───────────── -->
   <section class="w-full max-w-4xl bg-white shadow rounded-xl p-6">
     <h2 class="font-semibold mb-4">➕ Add Bitcoin Address</h2>
     
     <div id="composer-content">
-      <!-- Step 1: Add Address -->
       <div id="step-address" class="space-y-4">
         <div class="grid md:grid-cols-4 gap-4">
           <div class="md:col-span-3">
@@ -119,9 +112,7 @@
         </div>
       </div>
 
-      <!-- Step 2: Sign Message -->
       <div id="step-sign" class="hidden space-y-6">
-        <!-- Instructions -->
         <div class="bg-amber-50 border border-amber-200 rounded-lg p-4">
           <div class="flex items-start space-x-3">
             <div class="text-amber-600 mt-0.5 text-lg">⚠️</div>
@@ -134,7 +125,6 @@
           </div>
         </div>
 
-        <!-- Address Info -->
         <div class="bg-slate-50 rounded-lg p-4 border">
           <div class="grid md:grid-cols-2 gap-4">
             <div>
@@ -148,7 +138,6 @@
           </div>
         </div>
 
-        <!-- Message to Sign -->
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-2">Message to sign:</label>
           <div class="relative">
@@ -159,10 +148,9 @@
               📋 Copy Message
             </button>
           </div>
-          <div class="text-xs text-slate-500 mt-1">Copy this exact message and sign it with your wallet</div>
+          <div class="text-xs text-slate-500 mt-1">This message now includes your unique "Proof Name" for added security.</div>
         </div>
 
-        <!-- Signature Input -->
         <div class="grid md:grid-cols-3 gap-4">
           <div class="md:col-span-2">
             <label class="block text-sm font-medium text-slate-700 mb-2">Paste signature here:</label>
@@ -186,7 +174,6 @@
     </div>
   </section>
 
-  <!-- ───────────── Instructions ───────────── -->
   <section class="w-full max-w-4xl mt-8">
     <div class="bg-white rounded-lg p-6 shadow">
       <h3 class="font-semibold mb-4 text-center">🔐 How Bitcoin Proof of Funds Works</h3>
@@ -194,11 +181,11 @@
         <div class="space-y-3">
           <div class="font-medium text-slate-700">📋 Process:</div>
           <div class="space-y-2 text-slate-600">
-            <div>1. Add your Bitcoin address and we'll fetch the current balance</div>
-            <div>2. Sign the generated message with your wallet software</div>
-            <div>3. Paste the signature to cryptographically prove ownership</div>
-            <div>4. Repeat for additional addresses until you reach your target</div>
-            <div>5. Export a verifiable proof document</div>
+            <div>1. Fill in the "Proof Configuration" section first</div>
+            <div>2. Add your Bitcoin address and we'll fetch the current balance</div>
+            <div>3. Sign the generated message (which includes your Proof Name) with your wallet</div>
+            <div>4. Paste the signature to cryptographically prove ownership</div>
+            <div>5. Repeat for all addresses, then export your verifiable proof</div>
           </div>
         </div>
         <div class="space-y-3">
@@ -206,7 +193,7 @@
           <div class="space-y-2 text-slate-600">
             <div>• No private keys required - only signatures</div>
             <div>• Cryptographically verifiable by third parties</div>
-            <div>• Works with all Bitcoin address types</div>
+            <div>• Proof is tied to the specific "Proof Name" you provide</div>
             <div>• No funds movement necessary</div>
             <div>• Timestamps prevent replay attacks</div>
           </div>
@@ -215,7 +202,6 @@
     </div>
   </section>
 
-  <!-- Footer -->
   <footer class="mt-12 text-center text-xs text-slate-400">
     <div>Bitcoin Proof of Funds Tool • Open Source • No Private Keys Required</div>
   </footer>
@@ -247,6 +233,14 @@
       const addressInput = document.getElementById('address-input');
       const address = addressInput.value.trim();
       
+      const proofName = document.getElementById('proof-name').value.trim();
+
+      if (!proofName) {
+        showAlert('Please provide a "Proof Name" in the configuration section first.', 'error');
+        document.getElementById('proof-name').focus();
+        return;
+      }
+      
       if (!address) {
         showAlert('Please enter a Bitcoin address', 'error');
         return;
@@ -277,17 +271,19 @@
         currentAddress = address;
         currentBalance = data.balance;
 
-        // Generate proof message
+        // Generate proof message, now including the proof name
         const proofResponse = await fetch('/api/create-proof', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            addresses: [{ address: currentAddress, balance: currentBalance }]
+            addresses: [{ address: currentAddress, balance: currentBalance }],
+            proof_name: proofName // <-- ADDED
           })
         });
 
         if (!proofResponse.ok) {
-          throw new Error('Failed to generate proof message');
+          const errorData = await proofResponse.json();
+          throw new Error(errorData.error || 'Failed to generate proof message');
         }
 
         const proofData = await proofResponse.json();
@@ -481,7 +477,6 @@
 
     function copyMessage() {
       const messageText = document.getElementById('message-to-sign');
-      messageText.select();
       navigator.clipboard.writeText(messageText.value).then(() => {
         const btn = event.target;
         const originalText = btn.textContent;
@@ -600,7 +595,7 @@
     function showAlert(message, type = 'info') {
       // Create alert element
       const alert = document.createElement('div');
-      alert.className = `fixed top-4 right-4 px-4 py-3 rounded-lg shadow-lg text-sm font-medium z-50 transition-all duration-300 transform`;
+      alert.className = `fixed top-4 right-4 px-4 py-3 rounded-lg shadow-lg text-sm font-medium z-50 transition-all duration-300 transform translate-x-full`;
       
       // Style based on type
       switch (type) {
@@ -629,7 +624,7 @@
       
       // Remove after 4 seconds
       setTimeout(() => {
-        alert.style.transform = 'translateX(100%)';
+        alert.style.transform = 'translateX(120%)';
         setTimeout(() => {
           if (alert.parentNode) {
             alert.parentNode.removeChild(alert);
@@ -641,8 +636,6 @@
     // Update progress when target changes
     document.getElementById('target-btc').addEventListener('input', updateProgress);
     
-    // Initialize alert positioning
-    alert.style.transform = 'translateX(100%)';
   </script>
 </body>
 </html>

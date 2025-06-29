@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Proof of Funds: {{ proof.proof_name }}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📄</text></svg>">
+</head>
+<body class="min-h-screen bg-slate-100 flex justify-center items-center py-10">
+  <main class="w-full max-w-4xl bg-white shadow-lg rounded-xl p-8 space-y-6">
+    
+    <header class="border-b pb-6 mb-4">
+      <h1 class="text-3xl font-bold tracking-tight text-slate-900">Cryptographic Proof of Funds</h1>
+      <p class="text-lg text-slate-600">This document verifies control over the listed Bitcoin assets.</p>
+    </header>
+
+    <div class="p-4 rounded-lg {% if proof.total_amount >= proof.target_amount %} bg-emerald-50 border-emerald-200 {% else %} bg-amber-50 border-amber-200 {% endif %}">
+      <div class="font-bold text-xl {% if proof.total_amount >= proof.target_amount %} text-emerald-800 {% else %} text-amber-800 {% endif %}">
+        {% if proof.total_amount >= proof.target_amount %}
+          ✅ Verification Target Reached
+        {% else %}
+          ⚠️ Verification Target Not Reached
+        {% endif %}
+      </div>
+    </div>
+
+    <section class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+      <div>
+        <div class="text-sm font-medium text-slate-500">Proof Name</div>
+        <div class="text-lg font-semibold text-slate-800">{{ proof.proof_name }}</div>
+      </div>
+      <div>
+        <div class="text-sm font-medium text-slate-500">Proof ID</div>
+        <div class="text-lg font-mono text-slate-600">{{ proof.proof_id }}</div>
+      </div>
+      <div>
+        <div class="text-sm font-medium text-slate-500">Total Verified Amount</div>
+        <div class="text-lg font-mono text-emerald-700 font-bold">{{ "%.8f"|format(proof.total_amount) }} BTC</div>
+      </div>
+      <div>
+        <div class="text-sm font-medium text-slate-500">Target Amount</div>
+        <div class="text-lg font-mono text-slate-600">{{ "%.8f"|format(proof.target_amount) }} BTC</div>
+      </div>
+      <div>
+        <div class="text-sm font-medium text-slate-500">Verified On</div>
+        <div class="text-lg text-slate-600">{{ proof.timestamp.strftime('%Y-%m-%d %H:%M:%S UTC') }}</div>
+      </div>
+      <div>
+        <div class="text-sm font-medium text-slate-500">Expires On</div>
+        <div class="text-lg text-slate-600">{{ proof.expiry_date.strftime('%Y-%m-%d') if proof.expiry_date else 'N/A' }}</div>
+      </div>
+    </section>
+
+    <section>
+      <h2 class="font-semibold text-slate-800 mb-2">Signed Message</h2>
+      <div class="p-4 bg-slate-50 border rounded-lg">
+        <pre class="whitespace-pre-wrap font-mono text-xs text-slate-700">{{ proof.message }}</pre>
+      </div>
+    </section>
+
+    <section>
+      <h2 class="font-semibold text-slate-800 mb-2">Verified Addresses</h2>
+      <div class="overflow-x-auto rounded-lg border">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-100">
+            <tr>
+              <th class="px-4 py-3 text-left font-medium text-slate-600">Address</th>
+              <th class="px-4 py-3 text-right font-medium text-slate-600">Balance (BTC)</th>
+              <th class="px-4 py-3 text-left font-medium text-slate-600">Signature</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y">
+            {% for address_info in proof.addresses %}
+            <tr>
+              <td class="px-4 py-3 font-mono text-xs text-slate-800">{{ address_info.address }}</td>
+              <td class="px-4 py-3 text-right font-mono text-slate-800">{{ "%.8f"|format(address_info.balance) }}</td>
+              <td class="px-4 py-3 font-mono text-xs text-slate-500 truncate" title="{{ proof.signatures[address_info.address] }}">
+                {{ proof.signatures[address_info.address][:20] }}...
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="flex justify-end items-center space-x-4 pt-6 border-t mt-6">
+      <a href="/" class="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors">
+        Create New Proof
+      </a>
+      <a href="/proof/{{ proof.proof_id }}/pdf" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors">
+        Download as PDF
+      </a>
+    </section>
+
+  </main>
+</body>
+</html>

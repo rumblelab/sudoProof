@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-t" />
+  <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Bitcoin Proof of Funds</title>
   <script src="https://unpkg.com/htmx.org@1.9.11"></script>
@@ -27,7 +27,7 @@
       <div>
         <label class="block text-sm font-medium text-slate-700 mb-1">Proof Name</label>
         <input id="proof-name" name="proof_name" type="text" required 
-               placeholder="e.g.,Buyer Qualification for J. Doe."
+               placeholder="e.g., Series A Investment Fund"
                class="w-full rounded-lg border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-indigo-500" />
       </div>
       <div>
@@ -49,14 +49,14 @@
     </div>
     <div class="ml-6 flex space-x-3">
       <button id="verify-all-btn" onclick="verifyAllSignatures()" 
-              class="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" 
-              disabled>
-        🔍 Verify All
+        class="px-4 py-2 rounded-lg bg-gray-600 text-white text-sm font-medium hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" 
+        disabled>
+        Re-Check Sigs
       </button>
-      <button id="export-btn" onclick="exportProof()" 
-              class="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" 
-              disabled>
-        📋 Export Proof
+      <button id="finalize-btn" onclick="finalizeProof()" 
+        class="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" 
+        disabled>
+        Finalize Proof & Get Link
       </button>
     </div>
   </section>
@@ -173,35 +173,7 @@
       </div>
     </div>
   </section>
-
-  <section class="w-full max-w-4xl mt-8">
-    <div class="bg-white rounded-lg p-6 shadow">
-      <h3 class="font-semibold mb-4 text-center">🔐 How Bitcoin Proof of Funds Works</h3>
-      <div class="grid md:grid-cols-2 gap-6 text-sm">
-        <div class="space-y-3">
-          <div class="font-medium text-slate-700">📋 Process:</div>
-          <div class="space-y-2 text-slate-600">
-            <div>1. Fill in the "Proof Configuration" section first</div>
-            <div>2. Add your Bitcoin address and we'll fetch the current balance</div>
-            <div>3. Sign the generated message (which includes your Proof Name) with your wallet</div>
-            <div>4. Paste the signature to cryptographically prove ownership</div>
-            <div>5. Repeat for all addresses, then export your verifiable proof</div>
-          </div>
-        </div>
-        <div class="space-y-3">
-          <div class="font-medium text-slate-700">🛡️ Security:</div>
-          <div class="space-y-2 text-slate-600">
-            <div>• No private keys required - only signatures</div>
-            <div>• Cryptographically verifiable by third parties</div>
-            <div>• Proof is tied to the specific "Proof Name" you provide</div>
-            <div>• No funds movement necessary</div>
-            <div>• Timestamps prevent replay attacks</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
+  
   <footer class="mt-12 text-center text-xs text-slate-400">
     <div>Bitcoin Proof of Funds Tool • Open Source • No Private Keys Required</div>
   </footer>
@@ -211,28 +183,21 @@
     let currentAddress = null;
     let currentBalance = 0;
     let currentMessage = null;
-    let currentProofId = null;
+    let currentProofId = null; // This now holds the secure token
     let proofRows = [];
     let totalBalance = 0;
 
-    // Initialize
     document.addEventListener('DOMContentLoaded', function() {
-      // Set default expiry to 30 days from now
       const futureDate = new Date();
       futureDate.setDate(futureDate.getDate() + 30);
       document.getElementById('expiry-date').valueAsDate = futureDate;
-      
-      // Set default target
       document.getElementById('target-btc').value = '1.00000000';
-      
       updateProgress();
     });
 
-    // Add address workflow
     async function addAddress() {
       const addressInput = document.getElementById('address-input');
       const address = addressInput.value.trim();
-      
       const proofName = document.getElementById('proof-name').value.trim();
 
       if (!proofName) {
@@ -245,13 +210,6 @@
         showAlert('Please enter a Bitcoin address', 'error');
         return;
       }
-
-      if (!isValidBitcoinAddress(address)) {
-        showAlert('Invalid Bitcoin address format', 'error');
-        return;
-      }
-
-      // Check if address already exists
       if (proofRows.some(row => row.address === address)) {
         showAlert('This address has already been added', 'warning');
         return;
@@ -259,25 +217,19 @@
 
       try {
         setButtonLoading('add-address-btn', true, 'Loading...');
-
-        // Fetch balance
         const response = await fetch(`/api/address-balance/${address}`);
         const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.error || 'Failed to fetch balance');
-        }
+        if (!response.ok) throw new Error(data.error || 'Failed to fetch balance');
 
         currentAddress = address;
         currentBalance = data.balance;
 
-        // Generate proof message, now including the proof name
         const proofResponse = await fetch('/api/create-proof', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             addresses: [{ address: currentAddress, balance: currentBalance }],
-            proof_name: proofName // <-- ADDED
+            proof_name: proofName
           })
         });
 
@@ -288,9 +240,9 @@
 
         const proofData = await proofResponse.json();
         currentMessage = proofData.message;
+        // This is now the secure, unguessable ID
         currentProofId = proofData.proof_id;
 
-        // Update UI
         updateSigningStep();
         showStep('step-sign');
 
@@ -309,124 +261,115 @@
 
     async function verifySignature() {
       const signature = document.getElementById('signature-input').value.trim();
-      
       if (!signature) {
         showAlert('Please paste the signature from your wallet', 'error');
         return;
       }
 
       try {
-        const response = await fetch('/api/verify-proof', {
+        // Step 1: Call the new lightweight verification endpoint for instant feedback
+        const response = await fetch('/api/verify-signature-only', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            proof_id: currentProofId,
-            addresses: [{ address: currentAddress, balance: currentBalance }],
-            signatures: { [currentAddress]: signature },
+            address: currentAddress,
+            signature: signature,
             message: currentMessage,
-            proof_name: document.getElementById('proof-name').value,
-            target_amount: parseFloat(document.getElementById('target-btc').value)
           })
         });
 
         const result = await response.json();
-
-        if (!response.ok) {
-          throw new Error(result.error || 'Verification failed');
+        if (!response.ok || !result.valid) {
+          throw new Error(result.error || 'Signature verification failed. Please check your signature.');
         }
 
-        if (!result.verified) {
-          throw new Error('Signature verification failed. Please check your signature.');
-        }
-
-        // Add to rows
+        // Step 2: If valid, add to the local array and table. DO NOT save to DB yet.
         addProofRow(currentAddress, currentMessage, signature, currentBalance, 'verified');
-        
-        // Reset form
         resetComposer();
-        
-        // Update progress
         updateProgress();
 
-        showAlert('✅ Address verified and added successfully!', 'success');
+        showAlert('✅ Signature verified and added to the list below.', 'success');
 
       } catch (error) {
         showAlert('❌ ' + error.message, 'error');
       }
     }
+    async function finalizeProof() {
+        if (proofRows.length === 0) {
+            showAlert('Please add and verify at least one address first.', 'error');
+            return;
+        }
+
+        const finalizeBtn = document.getElementById('finalize-btn');
+        setButtonLoading('finalize-btn', true, 'Finalizing...');
+
+        try {
+            // Consolidate all data for the final submission
+            const addressesPayload = proofRows.map(row => ({ address: row.address, balance: row.balance }));
+            const signaturesPayload = proofRows.reduce((acc, row) => {
+                acc[row.address] = row.signature;
+                return acc;
+            }, {});
+
+            const response = await fetch('/api/verify-proof', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    addresses: addressesPayload,
+                    signatures: signaturesPayload,
+                    message: currentMessage, // Assuming one message for all, which is correct
+                    proof_name: document.getElementById('proof-name').value,
+                    target_amount: parseFloat(document.getElementById('target-btc').value),
+                    expiry_date: document.getElementById('expiry-date').value
+                })
+            });
+
+            const result = await response.json();
+
+            if (!response.ok || !result.verified) {
+                throw new Error(result.error || 'Failed to finalize the proof.');
+            }
+
+            // Redirect the user to their new, permanent proof page
+            window.location.href = `/proof/${result.proof_id}`;
+
+        } catch (error) {
+            showAlert('❌ ' + error.message, 'error');
+            setButtonLoading('finalize-btn', false, 'Finalize Proof & Get Link');
+        }
+    }
 
     function addProofRow(address, message, signature, balance, status) {
       const rowId = 'row_' + Date.now();
-      const row = {
-        id: rowId,
-        address,
-        message,
-        signature,
-        balance,
-        status
-      };
-
-      proofRows.push(row);
+      proofRows.push({ id: rowId, address, message, signature, balance, status });
       totalBalance += balance;
 
-      // Add to table
       const tbody = document.getElementById('rows-body');
       const tr = document.createElement('tr');
       tr.id = rowId;
       tr.className = 'bg-white hover:bg-slate-50 transition-colors';
-      
       tr.innerHTML = `
-        <td class="px-4 py-3">
-          <div class="font-mono text-xs text-slate-900">${truncateAddress(address)}</div>
-          <div class="text-xs text-slate-500">${getAddressType(address)}</div>
-        </td>
-        <td class="px-4 py-3">
-          <div class="truncate max-w-[150px] font-mono text-xs text-slate-600" title="${message}">
-            ${truncateText(message, 30)}
-          </div>
-        </td>
-        <td class="px-4 py-3">
-          <div class="truncate max-w-[150px] font-mono text-xs text-slate-600" title="${signature}">
-            ${truncateText(signature, 30)}
-          </div>
-        </td>
-        <td class="px-4 py-3 text-right">
-          <div class="font-mono text-sm text-slate-900">${balance.toFixed(8)}</div>
-          <div class="text-xs text-slate-500">BTC</div>
-        </td>
-        <td class="px-4 py-3 text-center">
-          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
-            ✅ Verified
-          </span>
-        </td>
-        <td class="px-4 py-3 text-center">
-          <button onclick="removeRow('${rowId}')" 
-                  class="text-slate-400 hover:text-red-500 text-lg transition-colors"
-                  title="Remove this address">
-            🗑️
-          </button>
-        </td>
+        <td class="px-4 py-3"><div class="font-mono text-xs">${truncateAddress(address)}</div></td>
+        <td class="px-4 py-3"><div class="truncate max-w-[150px] font-mono text-xs" title="${message}">${truncateText(message, 30)}</div></td>
+        <td class="px-4 py-3"><div class="truncate max-w-[150px] font-mono text-xs" title="${signature}">${truncateText(signature, 30)}</div></td>
+        <td class="px-4 py-3 text-right font-mono text-sm">${balance.toFixed(8)}</td>
+        <td class="px-4 py-3 text-center"><span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">✅ Verified</span></td>
+        <td class="px-4 py-3 text-center"><button onclick="removeRow('${rowId}')" class="text-slate-400 hover:text-red-500 text-lg transition-colors">🗑️</button></td>
       `;
-
       tbody.appendChild(tr);
-      
-      // Hide empty state
       document.getElementById('empty-state').style.display = 'none';
     }
 
     function removeRow(rowId) {
       const rowIndex = proofRows.findIndex(row => row.id === rowId);
-      if (rowIndex !== -1) {
+      if (rowIndex > -1) {
         totalBalance -= proofRows[rowIndex].balance;
         proofRows.splice(rowIndex, 1);
       }
-
       document.getElementById(rowId).remove();
-
       if (proofRows.length === 0) {
         document.getElementById('empty-state').style.display = 'block';
       }
-
       updateProgress();
       showAlert('Address removed from proof', 'info');
     }
@@ -434,34 +377,31 @@
     function updateProgress() {
       const targetBtc = parseFloat(document.getElementById('target-btc').value) || 1;
       const percentage = Math.min(100, (totalBalance / targetBtc) * 100);
-      
       document.getElementById('progress-bar').style.width = percentage + '%';
-      document.getElementById('progress-text').textContent = 
-        `${totalBalance.toFixed(8)} / ${targetBtc.toFixed(8)} BTC`;
-
-      // Update button states
-      const exportBtn = document.getElementById('export-btn');
-      const verifyBtn = document.getElementById('verify-all-btn');
-      
-      exportBtn.disabled = percentage < 100;
-      verifyBtn.disabled = proofRows.length === 0;
-      
-      if (percentage >= 100) {
-        exportBtn.innerHTML = '🎉 Export Proof';
-        exportBtn.className = exportBtn.className.replace('bg-emerald-600', 'bg-emerald-500');
-      } else {
-        exportBtn.innerHTML = '📋 Export Proof';
-        exportBtn.className = exportBtn.className.replace('bg-emerald-500', 'bg-emerald-600');
-      }
+      document.getElementById('progress-text').textContent = `${totalBalance.toFixed(8)} / ${targetBtc.toFixed(8)} BTC`;
+      // document.getElementById('export-btn').disabled = percentage < 100;
+      // document.getElementById('verify-all-btn').disabled = proofRows.length === 0;
+      document.getElementById('finalize-btn').disabled = proofRows.length === 0;
+      document.getElementById('verify-all-btn').disabled = proofRows.length === 0;
+    }
+    
+    function exportProof() {
+        // This function could now just point the user to their shareable link,
+        // as the primary artifact is the webpage and its PDF download.
+        const firstProofId = proofRows.length > 0 ? proofRows[0].proofId : null; // This logic needs adjustment.
+        // For now, we find the first proof and get its ID. A better approach would be to have a single proof ID for the session.
+        // Let's assume the last used ID is the one for the whole proof.
+        if (currentProofId) {
+            const proofUrl = `${window.location.origin}/proof/${currentProofId}`;
+            showAlert(`Your shareable proof page is the primary document to export. You can get the PDF from there. <a href="${proofUrl}" target="_blank" class="underline">View it here.</a>`, 'info', 10000);
+        } else {
+            showAlert('Please add and verify at least one address to generate a proof link.', 'error');
+        }
     }
 
     function resetComposer() {
       document.getElementById('address-input').value = '';
       document.getElementById('signature-input').value = '';
-      currentAddress = null;
-      currentBalance = 0;
-      currentMessage = null;
-      currentProofId = null;
       showStep('step-address');
     }
 
@@ -481,99 +421,8 @@
         const btn = event.target;
         const originalText = btn.textContent;
         btn.textContent = '✅ Copied!';
-        btn.className = btn.className.replace('hover:bg-slate-50', 'bg-emerald-50 border-emerald-300');
-        setTimeout(() => {
-          btn.textContent = originalText;
-          btn.className = btn.className.replace('bg-emerald-50 border-emerald-300', 'hover:bg-slate-50');
-        }, 2000);
+        setTimeout(() => { btn.textContent = originalText; }, 2000);
       });
-    }
-
-    async function verifyAllSignatures() {
-      if (proofRows.length === 0) return;
-      
-      showAlert('🔍 Verifying all signatures...', 'info');
-      
-      // In a real implementation, you would re-verify all signatures
-      // For now, we'll just show a success message since they were already verified
-      setTimeout(() => {
-        showAlert(`✅ All ${proofRows.length} signatures verified successfully!`, 'success');
-      }, 1000);
-    }
-
-    function exportProof() {
-      const targetBtc = parseFloat(document.getElementById('target-btc').value);
-      const proofName = document.getElementById('proof-name').value;
-      const expiryDate = document.getElementById('expiry-date').value;
-
-      if (totalBalance < targetBtc) {
-        showAlert('Cannot export: Target amount not yet reached', 'error');
-        return;
-      }
-
-      const proofData = {
-        proof_metadata: {
-          name: proofName,
-          target_btc: targetBtc,
-          actual_btc: totalBalance,
-          expiry_date: expiryDate,
-          generated_at: new Date().toISOString(),
-          addresses_count: proofRows.length
-        },
-        addresses: proofRows.map(row => ({
-          address: row.address,
-          balance: row.balance,
-          message: row.message,
-          signature: row.signature,
-          address_type: getAddressType(row.address),
-          verified: true
-        })),
-        verification_info: {
-          total_balance: totalBalance,
-          target_reached: totalBalance >= targetBtc,
-          completion_percentage: (totalBalance / targetBtc * 100).toFixed(2),
-          cryptographic_proof: true
-        }
-      };
-
-      // Export as JSON
-      const blob = new Blob([JSON.stringify(proofData, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `bitcoin-proof-${proofName.replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().split('T')[0]}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-
-      showAlert('🎉 Proof exported successfully!', 'success');
-    }
-
-    // Utility functions
-    function isValidBitcoinAddress(address) {
-      if (!address || typeof address !== 'string') return false;
-      
-      // Legacy P2PKH addresses (1...)
-      if (address.startsWith('1') && address.length >= 26 && address.length <= 35) return true;
-      
-      // P2SH addresses (3...)
-      if (address.startsWith('3') && address.length >= 26 && address.length <= 35) return true;
-      
-      // SegWit addresses (bc1...)
-      if (address.startsWith('bc1') && address.length >= 39 && address.length <= 62) return true;
-      
-      // Testnet addresses
-      if (address.startsWith('tb1') || address.startsWith('m') || address.startsWith('n') || address.startsWith('2')) return true;
-      
-      return false;
-    }
-
-    function getAddressType(address) {
-      if (address.startsWith('1')) return 'P2PKH (Legacy)';
-      if (address.startsWith('3')) return 'P2SH (Script Hash)';
-      if (address.startsWith('bc1q')) return 'P2WPKH (SegWit)';
-      if (address.startsWith('bc1p')) return 'P2TR (Taproot)';
-      if (address.startsWith('tb1') || address.startsWith('m') || address.startsWith('n') || address.startsWith('2')) return 'Testnet';
-      return 'Unknown';
     }
 
     function truncateAddress(address) {
@@ -592,50 +441,29 @@
       button.textContent = text;
     }
 
-    function showAlert(message, type = 'info') {
-      // Create alert element
+    function showAlert(message, type = 'info', duration = 4000) {
       const alert = document.createElement('div');
-      alert.className = `fixed top-4 right-4 px-4 py-3 rounded-lg shadow-lg text-sm font-medium z-50 transition-all duration-300 transform translate-x-full`;
+      alert.className = `fixed top-4 right-4 px-4 py-3 rounded-lg shadow-lg text-sm z-50 transition-all duration-300 transform translate-x-full`;
       
-      // Style based on type
-      switch (type) {
-        case 'success':
-          alert.className += ' bg-emerald-100 text-emerald-800 border border-emerald-200';
-          break;
-        case 'error':
-          alert.className += ' bg-red-100 text-red-800 border border-red-200';
-          break;
-        case 'warning':
-          alert.className += ' bg-amber-100 text-amber-800 border border-amber-200';
-          break;
-        default:
-          alert.className += ' bg-blue-100 text-blue-800 border border-blue-200';
-      }
+      const typeClasses = {
+        success: 'bg-emerald-100 text-emerald-800 border border-emerald-200',
+        error: 'bg-red-100 text-red-800 border border-red-200',
+        warning: 'bg-amber-100 text-amber-800 border border-amber-200',
+        info: 'bg-blue-100 text-blue-800 border border-blue-200'
+      };
       
-      alert.textContent = message;
-      
-      // Add to page
+      alert.className += ` ${typeClasses[type] || typeClasses['info']}`;
+      alert.innerHTML = message;
       document.body.appendChild(alert);
-      
-      // Animate in
-      setTimeout(() => {
-        alert.style.transform = 'translateX(0)';
-      }, 10);
-      
-      // Remove after 4 seconds
+
+      setTimeout(() => { alert.style.transform = 'translateX(0)'; }, 10);
       setTimeout(() => {
         alert.style.transform = 'translateX(120%)';
-        setTimeout(() => {
-          if (alert.parentNode) {
-            alert.parentNode.removeChild(alert);
-          }
-        }, 300);
-      }, 4000);
+        setTimeout(() => { alert.parentNode?.removeChild(alert); }, 300);
+      }, duration);
     }
-
-    // Update progress when target changes
-    document.getElementById('target-btc').addEventListener('input', updateProgress);
     
+    document.getElementById('target-btc').addEventListener('input', updateProgress);
   </script>
 </body>
 </html>

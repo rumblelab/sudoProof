@@ -7,6 +7,8 @@ import json
 import logging
 from bitcoin_utils import BitcoinProofOfFunds
 from fpdf import FPDF
+import secrets
+import secrets  # <-- ADDED: Import the secrets library
 
 app = Flask(__name__)
 CORS(app)
@@ -80,9 +82,6 @@ def index():
 
 @app.route('/proof/<proof_id>')
 def proof_record_page(proof_id):
-    """
-    Serves the shareable proof record page.
-    """
     proof_data = ProofRecord.query.filter_by(proof_id=proof_id).first_or_404()
     return render_template('proof_record.html', proof=proof_data.to_dict())
 
@@ -90,19 +89,14 @@ def proof_record_page(proof_id):
 # --- API Endpoints ---
 @app.route('/proof/<proof_id>/pdf')
 def generate_proof_pdf(proof_id):
-    """
-    Generates a PDF for the proof record.
-    """
     proof = ProofRecord.query.filter_by(proof_id=proof_id).first_or_404().to_dict()
     
     pdf = PDF('P', 'mm', 'A4')
     pdf.add_page()
     
-    # --- Content ---
     pdf.set_font('helvetica', 'B', 12)
     pdf.cell(0, 10, 'Proof Details', 0, 1)
 
-    # Metadata
     pdf.set_font('helvetica', '', 10)
     pdf.cell(40, 8, 'Proof Name:', 0, 0)
     pdf.set_font('helvetica', 'B', 10)
@@ -115,21 +109,18 @@ def generate_proof_pdf(proof_id):
     pdf.cell(0, 8, f"{proof['total_amount']:.8f} BTC", 0, 1)
     pdf.set_text_color(0)
     
-    # Timestamps
     pdf.set_font('helvetica', '', 10)
     pdf.cell(40, 8, 'Verified On:', 0, 0)
     pdf.cell(0, 8, proof['timestamp'].strftime('%Y-%m-%d %H:%M:%S UTC'), 0, 1)
     
     pdf.ln(5)
     
-    # Signed Message
     pdf.set_font('helvetica', 'B', 12)
     pdf.cell(0, 10, 'Signed Message', 0, 1)
     pdf.set_font('courier', '', 8)
     pdf.multi_cell(0, 5, proof['message'], border=1, padding=2)
     pdf.ln(5)
 
-    # Addresses Table
     pdf.set_font('helvetica', 'B', 12)
     pdf.cell(0, 10, 'Verified Addresses', 0, 1)
     
@@ -146,10 +137,34 @@ def generate_proof_pdf(proof_id):
         pdf.cell(70, 7, proof['signatures'][addr['address']][:30] + '...', 1)
         pdf.ln()
 
-    # --- Output ---
     response = Response(pdf.output(dest='S').encode('latin-1'), mimetype='application/pdf')
     response.headers['Content-Disposition'] = f'inline; filename=proof_{proof_id}.pdf'
     return response
+    
+@app.route('/api/verify-signature-only', methods=['POST'])
+def verify_signature_only():
+    """
+    Verifies a single signature without saving a proof record.
+    This is used for immediate feedback in the UI.
+    """
+    try:
+        data = request.json
+        address = data.get('address')
+        signature = data.get('signature')
+        message = data.get('message')
+
+        if not all([address, signature, message]):
+            return jsonify({'error': 'Missing required fields'}), 400
+
+        is_valid = BitcoinProofOfFunds.verify_message_signature(
+            address, signature, message
+        )
+        
+        return jsonify({'valid': is_valid})
+
+    except Exception as e:
+        logger.error(f"Error in verify-signature-only: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/create-proof', methods=['POST'])
 def create_proof():
@@ -175,10 +190,8 @@ def create_proof():
             timestamp=timestamp.isoformat()
         )
         
-        import hashlib
-        proof_id = hashlib.sha256(
-            f"{timestamp}{json.dumps(address_list)}".encode()
-        ).hexdigest()[:16]
+        # --- CHANGED: Use a secure, random token for the proof ID ---
+        proof_id = secrets.token_urlsafe(32)
         
         logger.info(f"Created proof {proof_id} for {len(addresses)} addresses")
         
@@ -194,78 +207,146 @@ def create_proof():
         logger.error(f"Error creating proof: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+# @app.route('/api/verify-proof', methods=['POST'])
+# def verify_proof():
+#     """
+#     Verify a proof of funds with signatures
+#     """
+#     try:
+#         data = request.json
+#         proof_id = data.get('proof_id')
+#         addresses = data.get('addresses', [])
+#         signatures = data.get('signatures', {})
+#         message = data.get('message')
+#         proof_name = data.get('proof_name')
+#         target_amount = data.get('target_amount')
+#         expiry_date = data.get('expiry_date')
+
+#         if not all([proof_id, addresses, signatures, message]):
+#             return jsonify({'error': 'Missing required fields'}), 400
+
+#         logger.info(f"Verifying proof {proof_id} with {len(signatures)} signatures")
+
+#         validation_result = BitcoinProofOfFunds.validate_proof_data(
+#             addresses, signatures, message
+#         )
+
+#         if validation_result['valid']:
+#             # Since proof_id is now random, we just save it directly.
+#             # A duplicate is astronomically unlikely.
+#             total_amount = sum([addr.get('balance', 0) for addr in addresses])
+            
+#             expiry_dt = None
+#             if expiry_date:
+#                 try:
+#                     expiry_dt = datetime.fromisoformat(expiry_date.replace('Z', '+00:00'))
+#                 except ValueError:
+#                     expiry_dt = datetime.strptime(expiry_date, '%Y-%m-%d')
+            
+#             proof_record = ProofRecord(
+#                 proof_id=proof_id,
+#                 proof_name=proof_name,
+#                 addresses=json.dumps([{
+#                     'address': a['address'], 
+#                     'balance': a.get('balance', 0)
+#                 } for a in addresses]),
+#                 total_amount=total_amount,
+#                 target_amount=target_amount,
+#                 message=message,
+#                 signatures=json.dumps(signatures),
+#                 expiry_date=expiry_dt,
+#                 verified=True
+#             )
+#             db.session.add(proof_record)
+#             db.session.commit()
+#             logger.info(f"Proof {proof_id} saved successfully")
+
+#         return jsonify({
+#             'proof_id': proof_id,
+#             'verified': validation_result['valid'],
+#             'verification_results': validation_result['results'],
+#             'summary': {
+#                 'total_addresses': validation_result['total_addresses'],
+#                 'valid_signatures': validation_result['valid_signatures']
+#             },
+#             'warnings': validation_result.get('warnings', []),
+#             'timestamp': datetime.utcnow().isoformat()
+#         })
+        
+#     except Exception as e:
+#         logger.error(f"Error verifying proof: {str(e)}")
+#         return jsonify({'error': str(e)}), 500
+    
 @app.route('/api/verify-proof', methods=['POST'])
 def verify_proof():
     """
-    Verify a proof of funds with signatures
+    Verify a COMPLETE proof of funds with ALL signatures and save it.
+    This now acts as the "finalize" endpoint.
     """
     try:
         data = request.json
-        proof_id = data.get('proof_id')
-        addresses = data.get('addresses', [])
-        signatures = data.get('signatures', {})
+        # The proof_id is now generated and saved here for the entire proof
+        proof_id = secrets.token_urlsafe(32)
+        
+        addresses = data.get('addresses', []) # Expects a list of address objects
+        signatures = data.get('signatures', {}) # Expects a dict of all signatures
         message = data.get('message')
         proof_name = data.get('proof_name')
         target_amount = data.get('target_amount')
         expiry_date = data.get('expiry_date')
 
-        if not all([proof_id, addresses, signatures, message]):
-            return jsonify({'error': 'Missing required fields'}), 400
+        if not all([addresses, signatures, message, proof_name]):
+            return jsonify({'error': 'Missing required fields for finalization'}), 400
 
-        logger.info(f"Verifying proof {proof_id} with {len(signatures)} signatures")
+        logger.info(f"Finalizing proof {proof_id} with {len(signatures)} signatures")
 
+        # The validation function already handles multiple addresses, so it's perfect
         validation_result = BitcoinProofOfFunds.validate_proof_data(
             addresses, signatures, message
         )
 
+        # Only save if the entire submission is valid
         if validation_result['valid']:
-            existing_proof = ProofRecord.query.filter_by(proof_id=proof_id).first()
-            if not existing_proof:
-                total_amount = sum([addr.get('balance', 0) for addr in addresses])
-                
-                expiry_dt = None
-                if expiry_date:
-                    try:
-                        expiry_dt = datetime.fromisoformat(expiry_date.replace('Z', '+00:00'))
-                    except ValueError:
-                        expiry_dt = datetime.strptime(expiry_date, '%Y-%m-%d')
-                
-                proof_record = ProofRecord(
-                    proof_id=proof_id,
-                    proof_name=proof_name,
-                    addresses=json.dumps([{
-                        'address': a['address'], 
-                        'balance': a.get('balance', 0)
-                    } for a in addresses]),
-                    total_amount=total_amount,
-                    target_amount=target_amount,
-                    message=message,
-                    signatures=json.dumps(signatures),
-                    expiry_date=expiry_dt,
-                    verified=True
-                )
-                db.session.add(proof_record)
-                db.session.commit()
-                logger.info(f"Proof {proof_id} saved successfully")
+            total_amount = sum([addr.get('balance', 0) for addr in addresses])
+            
+            expiry_dt = None
+            if expiry_date:
+                try:
+                    expiry_dt = datetime.fromisoformat(expiry_date.replace('Z', '+00:00'))
+                except ValueError:
+                    expiry_dt = datetime.strptime(expiry_date, '%Y-%m-%d')
+            
+            proof_record = ProofRecord(
+                proof_id=proof_id,
+                proof_name=proof_name,
+                addresses=json.dumps(addresses),
+                total_amount=total_amount,
+                target_amount=target_amount,
+                message=message,
+                signatures=json.dumps(signatures),
+                expiry_date=expiry_dt,
+                verified=True
+            )
+            db.session.add(proof_record)
+            db.session.commit()
+            logger.info(f"Proof {proof_id} saved successfully")
+        else:
+            # If for some reason the final validation fails, return an error
+            return jsonify({
+                'error': 'Final validation failed. Please re-check signatures.',
+                'details': validation_result
+            }), 400
 
-        # Return the proof_id so the frontend can link to the new page
+        # Return the new proof_id so the frontend can redirect
         return jsonify({
             'proof_id': proof_id,
-            'verified': validation_result['valid'],
-            'verification_results': validation_result['results'],
-            'summary': {
-                'total_addresses': validation_result['total_addresses'],
-                'valid_signatures': validation_result['valid_signatures']
-            },
-            'warnings': validation_result.get('warnings', []),
-            'timestamp': datetime.utcnow().isoformat()
+            'verified': True,
+            'message': 'Proof finalized successfully.'
         })
         
     except Exception as e:
-        logger.error(f"Error verifying proof: {str(e)}")
+        logger.error(f"Error finalizing proof: {str(e)}")
         return jsonify({'error': str(e)}), 500
-
-# The rest of your API endpoints remain the same...
 
 @app.route('/api/proof/<proof_id>', methods=['GET'])
 def get_proof(proof_id):
@@ -274,7 +355,6 @@ def get_proof(proof_id):
         if not proof:
             return jsonify({'error': 'Proof not found'}), 404
         
-        # We need to adjust this to handle the datetime objects for JSON serialization
         proof_dict = proof.to_dict()
         proof_dict['timestamp'] = proof.timestamp.isoformat()
         if proof.expiry_date:
@@ -287,7 +367,6 @@ def get_proof(proof_id):
         logger.error(f"Error retrieving proof: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-# ... (keep get_address_balance, verify_single_address, list_proofs, get_stats, health_check, etc.)
 @app.route('/api/address-balance/<address>', methods=['GET'])
 def get_address_balance(address):
     try:
@@ -363,14 +442,13 @@ def health_check():
 
 @app.errorhandler(404)
 def not_found(error):
-    # Try to render a 404 template if it exists
-    return render_template('404.html'), 404
+    # This will now serve a basic 404 page if a proof is not found
+    return "<h1>404 - Not Found</h1><p>The page you are looking for does not exist.</p>", 404
 
 @app.errorhandler(500)
 def internal_error(error):
     logger.error(f"Internal server error: {str(error)}")
     return jsonify({'error': 'Internal server error'}), 500
-
 
 if __name__ == '__main__':
     logger.info("Starting Bitcoin Proof of Funds server...")

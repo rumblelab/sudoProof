@@ -1,4 +1,4 @@
-/app/venv
+venv/
 /todo
 /app/__pycache__
 /app/instance/proofs.db

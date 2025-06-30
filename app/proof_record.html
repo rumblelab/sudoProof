@@ -84,8 +84,45 @@
       <a href="/proof/{{ proof.proof_id }}/pdf" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors">
         Download as PDF
       </a>
+      <button id="share-btn" onclick="copyShareLink()" title="Copy shareable link" class="p-2 text-white bg-gray-600 rounded-lg hover:bg-gray-700 transition-colors">
+        <span id="share-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+          </svg>
+        </span>
+        <span id="check-icon" class="hidden">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+          </svg>
+        </span>
+      </button>
+
     </section>
 
   </main>
+  <script>
+    function copyShareLink() {
+      const urlToCopy = window.location.href;
+      const shareButton = document.getElementById('share-btn');
+
+      navigator.clipboard.writeText(urlToCopy).then(() => {
+        // --- Success feedback ---
+        const originalText = shareButton.innerHTML;
+        shareButton.innerHTML = '✅ Copied!';
+        shareButton.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
+        shareButton.classList.remove('bg-gray-600', 'hover:bg-gray-700');
+        
+        setTimeout(() => {
+          shareButton.innerHTML = originalText;
+          shareButton.classList.remove('bg-emerald-600', 'hover:bg-emerald-700');
+          shareButton.classList.add('bg-gray-600', 'hover:bg-gray-700');
+        }, 2000); // Revert back after 2 seconds
+
+      }).catch(err => {
+        console.error('Failed to copy URL: ', err);
+        alert('Failed to copy URL. Please copy it manually from the address bar.');
+      });
+    }
+  </script>
 </body>
 </html>

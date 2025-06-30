@@ -7,7 +7,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📄</text></svg>">
 </head>
-<body class="min-h-screen bg-slate-100 flex justify-center items-center py-10">
+<body class="min-h-screen bg-slate-100 flex justify-center items-start py-10">
   <main class="w-full max-w-4xl bg-white shadow-lg rounded-xl p-8 space-y-6">
     
     <header class="border-b pb-6 mb-4">
@@ -31,16 +31,8 @@
         <div class="text-lg font-semibold text-slate-800">{{ proof.proof_name }}</div>
       </div>
       <div>
-        <div class="text-sm font-medium text-slate-500">Proof ID</div>
-        <div class="text-lg font-mono text-slate-600">{{ proof.proof_id }}</div>
-      </div>
-      <div>
         <div class="text-sm font-medium text-slate-500">Total Verified Amount</div>
         <div class="text-lg font-mono text-emerald-700 font-bold">{{ "%.8f"|format(proof.total_amount) }} BTC</div>
-      </div>
-      <div>
-        <div class="text-sm font-medium text-slate-500">Target Amount</div>
-        <div class="text-lg font-mono text-slate-600">{{ "%.8f"|format(proof.target_amount) }} BTC</div>
       </div>
       <div>
         <div class="text-sm font-medium text-slate-500">Verified On</div>
@@ -52,37 +44,37 @@
       </div>
     </section>
 
-    <section>
-      <h2 class="font-semibold text-slate-800 mb-2">Signed Message</h2>
-      <div class="p-4 bg-slate-50 border rounded-lg">
-        <pre class="whitespace-pre-wrap font-mono text-xs text-slate-700">{{ proof.message }}</pre>
-      </div>
-    </section>
+    <section class="space-y-6">
+        <h2 class="text-xl font-bold text-slate-800 pt-4 border-t">Detailed Address Verification</h2>
+        
+        {% for i in range(proof.parsed_addresses | length) %}
+            {% set address_info = proof.parsed_addresses[i] %}
+            {% set message = proof.parsed_messages[i] %}
+            {% set signature = proof.signatures[address_info.address] %}
+            
+            <div class="p-4 border rounded-lg space-y-3 bg-slate-50">
+                <h3 class="font-semibold text-slate-700">Proof for Address {{ i + 1 }}</h3>
+                
+                <div>
+                    <div class="text-xs font-medium text-slate-500">ADDRESS</div>
+                    <div class="font-mono text-sm text-slate-900 break-words">{{ address_info.address }}</div>
+                </div>
+                <div>
+                    <div class="text-xs font-medium text-slate-500">BALANCE</div>
+                    <div class="font-mono text-sm text-slate-900">{{ "%.8f"|format(address_info.balance) }} BTC</div>
+                </div>
 
-    <section>
-      <h2 class="font-semibold text-slate-800 mb-2">Verified Addresses</h2>
-      <div class="overflow-x-auto rounded-lg border">
-        <table class="w-full text-sm">
-          <thead class="bg-slate-100">
-            <tr>
-              <th class="px-4 py-3 text-left font-medium text-slate-600">Address</th>
-              <th class="px-4 py-3 text-right font-medium text-slate-600">Balance (BTC)</th>
-              <th class="px-4 py-3 text-left font-medium text-slate-600">Signature</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y">
-            {% for address_info in proof.addresses %}
-            <tr>
-              <td class="px-4 py-3 font-mono text-xs text-slate-800">{{ address_info.address }}</td>
-              <td class="px-4 py-3 text-right font-mono text-slate-800">{{ "%.8f"|format(address_info.balance) }}</td>
-              <td class="px-4 py-3 font-mono text-xs text-slate-500 truncate" title="{{ proof.signatures[address_info.address] }}">
-                {{ proof.signatures[address_info.address][:20] }}...
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
+                <div>
+                    <div class="text-xs font-medium text-slate-500">MESSAGE SIGNED</div>
+                    <pre class="whitespace-pre-wrap font-mono text-xs text-slate-700 p-2 border bg-white rounded-md mt-1">{{ message }}</pre>
+                </div>
+
+                <div>
+                    <div class="text-xs font-medium text-slate-500">VERIFICATION SIGNATURE</div>
+                    <div class="font-mono text-xs text-red-700 break-words p-2 border bg-white rounded-md mt-1">{{ signature }}</div>
+                </div>
+            </div>
+        {% endfor %}
     </section>
 
     <section class="flex justify-end items-center space-x-4 pt-6 border-t mt-6">

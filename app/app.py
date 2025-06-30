@@ -84,8 +84,18 @@ def index():
 
 @app.route('/proof/<proof_id>')
 def proof_record_page(proof_id):
-    proof_data = ProofRecord.query.filter_by(proof_id=proof_id).first_or_404()
-    return render_template('proof_record.html', proof=proof_data.to_dict())
+    proof_data_obj = ProofRecord.query.filter_by(proof_id=proof_id).first_or_404()
+    proof_dict = proof_data_obj.to_dict()
+
+    try:
+        proof_dict['parsed_messages'] = json.loads(proof_dict['message'])
+        proof_dict['parsed_addresses'] = json.loads(proof_data_obj.addresses) # Use the raw string from the db object
+    except json.JSONDecodeError:
+        # Handle case where the message might not be valid JSON
+        proof_dict['parsed_messages'] = []
+        proof_dict['parsed_addresses'] = []
+    
+    return render_template('proof_record.html', proof=proof_dict)
 
 
 # --- API Endpoints ---
@@ -125,6 +135,12 @@ def generate_proof_pdf(proof_id):
     pdf.cell(col1_width, line_height, 'Proof Generated On:', 0, 0)
     pdf.set_font('helvetica', '', 10)
     pdf.cell(col2_width, line_height, proof['timestamp'].strftime('%Y-%m-%d %H:%M:%S UTC'), 0, 1)
+
+    pdf.set_font('helvetica', 'B', 10)
+    pdf.cell(col1_width, line_height, 'Expires On:', 0, 0)
+    pdf.set_font('helvetica', '', 10)
+    expiry_text = proof['expiry_date'].strftime('%Y-%m-%d') if proof['expiry_date'] else 'N/A'
+    pdf.cell(col2_width, line_height, expiry_text, 0, 1)
     
     pdf.ln(10)
 

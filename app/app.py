@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory, render_template, Response
+from flask import Flask, request, jsonify, send_from_directory, render_template, Response, render_template_string
 import requests
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
@@ -39,6 +39,8 @@ class ProofRecord(db.Model):
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     expiry_date = db.Column(db.DateTime, nullable=True)
     verified = db.Column(db.Boolean, default=False)
+    delete_token = db.Column(db.String(64), unique=True, nullable=False)
+
     
     def to_dict(self):
         return {
@@ -207,75 +209,31 @@ def create_proof():
         logger.error(f"Error creating proof: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-# @app.route('/api/verify-proof', methods=['POST'])
-# def verify_proof():
-#     """
-#     Verify a proof of funds with signatures
-#     """
-#     try:
-#         data = request.json
-#         proof_id = data.get('proof_id')
-#         addresses = data.get('addresses', [])
-#         signatures = data.get('signatures', {})
-#         message = data.get('message')
-#         proof_name = data.get('proof_name')
-#         target_amount = data.get('target_amount')
-#         expiry_date = data.get('expiry_date')
-
-#         if not all([proof_id, addresses, signatures, message]):
-#             return jsonify({'error': 'Missing required fields'}), 400
-
-#         logger.info(f"Verifying proof {proof_id} with {len(signatures)} signatures")
-
-#         validation_result = BitcoinProofOfFunds.validate_proof_data(
-#             addresses, signatures, message
-#         )
-
-#         if validation_result['valid']:
-#             # Since proof_id is now random, we just save it directly.
-#             # A duplicate is astronomically unlikely.
-#             total_amount = sum([addr.get('balance', 0) for addr in addresses])
-            
-#             expiry_dt = None
-#             if expiry_date:
-#                 try:
-#                     expiry_dt = datetime.fromisoformat(expiry_date.replace('Z', '+00:00'))
-#                 except ValueError:
-#                     expiry_dt = datetime.strptime(expiry_date, '%Y-%m-%d')
-            
-#             proof_record = ProofRecord(
-#                 proof_id=proof_id,
-#                 proof_name=proof_name,
-#                 addresses=json.dumps([{
-#                     'address': a['address'], 
-#                     'balance': a.get('balance', 0)
-#                 } for a in addresses]),
-#                 total_amount=total_amount,
-#                 target_amount=target_amount,
-#                 message=message,
-#                 signatures=json.dumps(signatures),
-#                 expiry_date=expiry_dt,
-#                 verified=True
-#             )
-#             db.session.add(proof_record)
-#             db.session.commit()
-#             logger.info(f"Proof {proof_id} saved successfully")
-
-#         return jsonify({
-#             'proof_id': proof_id,
-#             'verified': validation_result['valid'],
-#             'verification_results': validation_result['results'],
-#             'summary': {
-#                 'total_addresses': validation_result['total_addresses'],
-#                 'valid_signatures': validation_result['valid_signatures']
-#             },
-#             'warnings': validation_result.get('warnings', []),
-#             'timestamp': datetime.utcnow().isoformat()
-#         })
-        
-#     except Exception as e:
-#         logger.error(f"Error verifying proof: {str(e)}")
-#         return jsonify({'error': str(e)}), 500
+@app.route('/proof/delete/<delete_token>')
+def delete_proof(delete_token):
+    """
+    Finds a proof by its secret delete_token and deletes it.
+    """
+    proof_to_delete = ProofRecord.query.filter_by(delete_token=delete_token).first_or_404()
+    
+    if proof_to_delete:
+        db.session.delete(proof_to_delete)
+        db.session.commit()
+        logger.info(f"Proof {proof_to_delete.proof_id} deleted successfully.")
+        return render_template_string("""
+            <!DOCTYPE html>
+            <html lang="en">
+            <head><title>Proof Deleted</title><script src="https://cdn.tailwindcss.com"></script></head>
+            <body class="bg-slate-100 flex items-center justify-center h-screen">
+                <div class="text-center p-8 bg-white rounded-lg shadow-md">
+                    <h1 class="text-2xl font-bold text-emerald-700">💨 POOF! 💨</h1>
+                    <h2 class="text-xl font-bold text-emerald-700">Proof Record Deleted</h2>
+                    <p class="text-slate-600 mt-2">The proof has been permanently removed from the database.</p>
+                    <a href="/" class="mt-6 inline-block px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">Create New Proof</a>
+                </div>
+            </body>
+            </html>
+        """)   
     
 @app.route('/api/verify-proof', methods=['POST'])
 def verify_proof():
@@ -284,9 +242,7 @@ def verify_proof():
     This now acts as the "finalize" endpoint.
     """
     try:
-        data = request.json
-        proof_id = secrets.token_urlsafe(32)
-        
+        data = request.json        
         addresses = data.get('addresses', [])
         signatures = data.get('signatures', {})
         proof_name = data.get('proof_name')
@@ -297,14 +253,16 @@ def verify_proof():
         if not all([addresses, signatures, proof_name]):
             return jsonify({'error': 'Missing required fields for finalization'}), 400
 
-        logger.info(f"Finalizing proof {proof_id} with {len(signatures)} signatures")
-
         # Pass only addresses and signatures to the updated validation function
         validation_result = BitcoinProofOfFunds.validate_proof_data(
             addresses, signatures
         )
 
         if validation_result['valid']:
+            proof_id = secrets.token_urlsafe(32)
+            
+            delete_token = secrets.token_urlsafe(32) # The new secret delete token
+
             total_amount = sum([addr.get('balance', 0) for addr in addresses])
             
             # Extract all messages to save them
@@ -324,6 +282,7 @@ def verify_proof():
             proof_record = ProofRecord(
                 proof_id=proof_id,
                 proof_name=proof_name,
+                delete_token=delete_token,
                 addresses=json.dumps(addresses),
                 total_amount=total_amount,
                 target_amount=target_amount,
@@ -344,6 +303,7 @@ def verify_proof():
 
         return jsonify({
             'proof_id': proof_id,
+            'delete_token': delete_token,
             'verified': True,
             'message': 'Proof finalized successfully.'
         })

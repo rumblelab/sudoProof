@@ -295,67 +295,107 @@
       }
     }
     async function finalizeProof() {
-        if (proofRows.length === 0) {
-            showAlert('Please add and verify at least one address first.', 'error');
-            return;
-        }
+    if (proofRows.length === 0) {
+        showAlert('Please add and verify at least one address first.', 'error');
+        return;
+    }
 
-        const finalizeBtn = document.getElementById('finalize-btn');
-        setButtonLoading('finalize-btn', true, 'Finalizing...');
+    const finalizeBtn = document.getElementById('finalize-btn');
+    setButtonLoading('finalize-btn', true, 'Finalizing...');
 
-        try {
-            // --- CHANGED: Construct the payload correctly ---
+    try {
+        // 1. & 2. Create payloads (this part was correct)
+        const addressesPayload = proofRows.map(row => ({
+            address: row.address,
+            balance: row.balance,
+            message: row.message
+        }));
 
-            // 1. Create a list of address objects, EACH containing its own message
-            const addressesPayload = proofRows.map(row => ({
-                address: row.address,
-                balance: row.balance,
-                message: row.message // Include the specific message for this row
-            }));
+        const signaturesPayload = proofRows.reduce((acc, row) => {
+            acc[row.address] = row.signature;
+            return acc;
+        }, {});
 
-            // 2. Create the dictionary of signatures (this part is the same)
-            const signaturesPayload = proofRows.reduce((acc, row) => {
-                acc[row.address] = row.signature;
-                return acc;
-            }, {});
+        // 3. Fetch data (this part was correct)
+        const response = await fetch('/api/verify-proof', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                addresses: addressesPayload,
+                signatures: signaturesPayload,
+                proof_name: document.getElementById('proof-name').value,
+                target_amount: parseFloat(document.getElementById('target-btc').value),
+                expiry_date: document.getElementById('expiry-date').value
+            })
+        });
 
-            const response = await fetch('/api/verify-proof', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    addresses: addressesPayload, // The new, correct payload
-                    signatures: signaturesPayload,
-                    // The single top-level message is now removed
-                    proof_name: document.getElementById('proof-name').value,
-                    target_amount: parseFloat(document.getElementById('target-btc').value),
-                    expiry_date: document.getElementById('expiry-date').value
-                })
-            });
+        const result = await response.json();
 
-            const result = await response.json();
+        // --- CORRECTED LOGIC ---
 
-            if (!response.ok || !result.verified) {
-                // Provide more detailed error feedback if possible
-                let errorMessage = result.error || 'Failed to finalize the proof.';
-                if (result.details) {
-                    for(const addr in result.details) {
-                        if(result.details[addr].valid === false) {
-                            errorMessage += ` Signature for ${addr.substring(0,12)}... failed.`;
-                            break;
-                        }
+        // 4. Check for errors. If an error exists, THROW it to the catch block.
+        if (!response.ok || !result.verified) {
+            let errorMessage = result.error || 'Failed to finalize the proof.';
+            if (result.details) {
+                for(const addr in result.details) {
+                    if(result.details[addr].valid === false) {
+                        errorMessage += ` Signature for ${addr.substring(0,12)}... failed.`;
+                        break;
                     }
                 }
-                throw new Error(errorMessage);
             }
-
-            // Redirect the user to their new, permanent proof page
-            window.location.href = `/proof/${result.proof_id}`;
-
-        } catch (error) {
-            showAlert('❌ ' + error.message, 'error', 6000);
-            setButtonLoading('finalize-btn', false, 'Finalize Proof & Get Link');
+            // We now correctly throw an error to be caught below.
+            throw new Error(errorMessage);
         }
+
+        // 5. If there were NO errors, this code will now be reached.
+        // This is the SUCCESS path.
+        const proofUrl = `/proof/${result.proof_id}`;
+        const deleteUrl = `/proof/delete/${result.delete_token}`;
+
+        // Replace the page content with the success/confirmation message.
+        document.body.innerHTML = `
+            <div class="bg-slate-100 flex items-center justify-center h-screen">
+                <div class="text-center p-8 bg-white rounded-lg shadow-xl max-w-2xl">
+                    <h1 class="text-2xl font-bold text-emerald-700">✅ Proof Finalized!</h1>
+                    <p class="text-slate-600 mt-2">Your proof has been created and is ready to be shared.</p>
+                    
+                    <div class="mt-6 text-left space-y-4">
+                        <div>
+                            <label class="font-semibold text-slate-800">Shareable Link:</label>
+                            <p class="text-slate-500 text-sm">This is the public link to share with others to view your proof.</p>
+                            <div class="mt-1 flex items-center bg-slate-50 p-2 rounded-md border">
+                                <input type="text" readonly value="${window.location.origin}${proofUrl}" class="flex-grow bg-transparent outline-none text-indigo-600 font-mono text-sm">
+                                <button onclick="navigator.clipboard.writeText(this.previousElementSibling.value)" class="ml-2 px-3 py-1 text-xs bg-white border rounded hover:bg-slate-100">Copy</button>
+                            </div>
+                        </div>
+
+                        <div class="p-4 bg-amber-50 border-l-4 border-amber-400">
+                            <label class="font-bold text-amber-900">SECRET - Deletion Link:</label>
+                            <p class="text-amber-800 text-sm">
+                                To permanently delete your proof from our server, use this private link. 
+                                <strong class="font-bold">Save it now. It will not be shown again.</strong>
+                            </p>
+                            <div class="mt-2 flex items-center bg-white p-2 rounded-md border">
+                                <input type="text" readonly value="${window.location.origin}${deleteUrl}" class="flex-grow bg-transparent outline-none text-red-600 font-mono text-sm">
+                                <button onclick="navigator.clipboard.writeText(this.previousElementSibling.value)" class="ml-2 px-3 py-1 text-xs bg-white border rounded hover:bg-slate-100">Copy</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <a href="${proofUrl}" target="_blank" class="mt-8 inline-block px-6 py-3 text-sm font-bold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">
+                        View Your Proof Page
+                    </a>
+                </div>
+            </div>
+        `;
+
+    } catch (error) {
+        // This catch block will now correctly handle errors from the fetch call.
+        showAlert('❌ ' + error.message, 'error', 6000);
+        setButtonLoading('finalize-btn', false, 'Finalize Proof & Get Link');
     }
+}
 
     function addProofRow(address, message, signature, balance, status) {
       const rowId = 'row_' + Date.now();

@@ -285,35 +285,40 @@ def verify_proof():
     """
     try:
         data = request.json
-        # The proof_id is now generated and saved here for the entire proof
         proof_id = secrets.token_urlsafe(32)
         
-        addresses = data.get('addresses', []) # Expects a list of address objects
-        signatures = data.get('signatures', {}) # Expects a dict of all signatures
-        message = data.get('message')
+        addresses = data.get('addresses', [])
+        signatures = data.get('signatures', {})
         proof_name = data.get('proof_name')
         target_amount = data.get('target_amount')
         expiry_date = data.get('expiry_date')
 
-        if not all([addresses, signatures, message, proof_name]):
+        # The single 'message' is no longer needed here, it's inside the 'addresses' list
+        if not all([addresses, signatures, proof_name]):
             return jsonify({'error': 'Missing required fields for finalization'}), 400
 
         logger.info(f"Finalizing proof {proof_id} with {len(signatures)} signatures")
 
-        # The validation function already handles multiple addresses, so it's perfect
+        # Pass only addresses and signatures to the updated validation function
         validation_result = BitcoinProofOfFunds.validate_proof_data(
-            addresses, signatures, message
+            addresses, signatures
         )
 
-        # Only save if the entire submission is valid
         if validation_result['valid']:
             total_amount = sum([addr.get('balance', 0) for addr in addresses])
             
+            # Extract all messages to save them
+            all_messages = [addr.get('message', '') for addr in addresses]
+
             expiry_dt = None
             if expiry_date:
                 try:
+                    # First, try to parse a full ISO 8601 timestamp (e.g., from JavaScript's toISOString())
+                    # The replace() handles the 'Z' for Zulu/UTC time.
                     expiry_dt = datetime.fromisoformat(expiry_date.replace('Z', '+00:00'))
                 except ValueError:
+                    # If that fails, it's likely a simple date format (e.g., '2025-06-30')
+                    # from an <input type="date"> element.
                     expiry_dt = datetime.strptime(expiry_date, '%Y-%m-%d')
             
             proof_record = ProofRecord(
@@ -322,7 +327,8 @@ def verify_proof():
                 addresses=json.dumps(addresses),
                 total_amount=total_amount,
                 target_amount=target_amount,
-                message=message,
+                # Store all messages as a JSON string in the message field
+                message=json.dumps(all_messages),
                 signatures=json.dumps(signatures),
                 expiry_date=expiry_dt,
                 verified=True
@@ -331,13 +337,11 @@ def verify_proof():
             db.session.commit()
             logger.info(f"Proof {proof_id} saved successfully")
         else:
-            # If for some reason the final validation fails, return an error
             return jsonify({
                 'error': 'Final validation failed. Please re-check signatures.',
-                'details': validation_result
+                'details': validation_result['results']
             }), 400
 
-        # Return the new proof_id so the frontend can redirect
         return jsonify({
             'proof_id': proof_id,
             'verified': True,

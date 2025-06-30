@@ -441,8 +441,11 @@ class BitcoinProofOfFunds:
             return None
     
     @staticmethod
-    def validate_proof_data(addresses: list, signatures: dict, message: str) -> dict:
-        """Validate a complete proof of funds submission with full cryptographic verification."""
+    def validate_proof_data(addresses: list, signatures: dict) -> dict: # <-- REMOVED message from arguments
+        """
+        Validate a complete proof submission. Each address object in the list
+        is expected to contain its own 'message' key.
+        """
         results = {}
         all_valid = True
         warnings = []
@@ -451,7 +454,9 @@ class BitcoinProofOfFunds:
         
         for addr_data in addresses:
             address = addr_data.get('address')
+            message = addr_data.get('message') # <-- GET message from the address object
             if not address: continue
+            
             signature = signatures.get(address, '').strip()
             
             if not signature:
@@ -459,6 +464,11 @@ class BitcoinProofOfFunds:
                 all_valid = False
                 continue
             
+            if not message: # <-- ADDED check for message
+                results[address] = {'valid': False, 'error': 'No message provided for this address'}
+                all_valid = False
+                continue
+
             is_valid = BitcoinProofOfFunds.verify_message_signature(address, signature, message)
             results[address] = {
                 'valid': is_valid,

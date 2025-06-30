@@ -304,8 +304,16 @@
         setButtonLoading('finalize-btn', true, 'Finalizing...');
 
         try {
-            // Consolidate all data for the final submission
-            const addressesPayload = proofRows.map(row => ({ address: row.address, balance: row.balance }));
+            // --- CHANGED: Construct the payload correctly ---
+
+            // 1. Create a list of address objects, EACH containing its own message
+            const addressesPayload = proofRows.map(row => ({
+                address: row.address,
+                balance: row.balance,
+                message: row.message // Include the specific message for this row
+            }));
+
+            // 2. Create the dictionary of signatures (this part is the same)
             const signaturesPayload = proofRows.reduce((acc, row) => {
                 acc[row.address] = row.signature;
                 return acc;
@@ -315,9 +323,9 @@
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    addresses: addressesPayload,
+                    addresses: addressesPayload, // The new, correct payload
                     signatures: signaturesPayload,
-                    message: currentMessage, // Assuming one message for all, which is correct
+                    // The single top-level message is now removed
                     proof_name: document.getElementById('proof-name').value,
                     target_amount: parseFloat(document.getElementById('target-btc').value),
                     expiry_date: document.getElementById('expiry-date').value
@@ -327,14 +335,24 @@
             const result = await response.json();
 
             if (!response.ok || !result.verified) {
-                throw new Error(result.error || 'Failed to finalize the proof.');
+                // Provide more detailed error feedback if possible
+                let errorMessage = result.error || 'Failed to finalize the proof.';
+                if (result.details) {
+                    for(const addr in result.details) {
+                        if(result.details[addr].valid === false) {
+                            errorMessage += ` Signature for ${addr.substring(0,12)}... failed.`;
+                            break;
+                        }
+                    }
+                }
+                throw new Error(errorMessage);
             }
 
             // Redirect the user to their new, permanent proof page
             window.location.href = `/proof/${result.proof_id}`;
 
         } catch (error) {
-            showAlert('❌ ' + error.message, 'error');
+            showAlert('❌ ' + error.message, 'error', 6000);
             setButtonLoading('finalize-btn', false, 'Finalize Proof & Get Link');
         }
     }

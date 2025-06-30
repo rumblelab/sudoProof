@@ -209,6 +209,10 @@
         showAlert('This address has already been added', 'warning');
         return;
       }
+      if (!isValidBitcoinAddress(address)) {
+        showAlert('Invalid Bitcoin address format. Please check the address.', 'error');
+        return; // Stop execution if the address is invalid
+    }
 
       try {
         setButtonLoading('add-address-btn', true, 'Loading...');
@@ -253,7 +257,47 @@
       document.getElementById('current-balance').textContent = `${currentBalance.toFixed(8)} BTC`;
       document.getElementById('message-to-sign').value = currentMessage;
     }
+    function isValidBitcoinAddress(address) {
+      if (!address || typeof address !== 'string') return false;
 
+      // Legacy (P2PKH) addresses, start with 1
+      if (address.startsWith('1') && address.length >= 26 && address.length <= 35) {
+        return true;
+      }
+
+      // P2SH addresses, start with 3
+      if (address.startsWith('3') && address.length >= 26 && address.length <= 35) {
+        return true;
+      }
+
+      // SegWit (Bech32/Bech32m) addresses, start with bc1
+      if (address.startsWith('bc1')) {
+        // P2WPKH and P2WSH addresses (Bech32)
+        if (address.startsWith('bc1q')) {
+            // Must be exactly 42 or 62 characters long
+            if (address.length === 42 || address.length === 62) {
+                return true;
+            }
+        }
+        // Taproot (P2TR) addresses (Bech32m)
+        if (address.startsWith('bc1p')) {
+            // Must be exactly 62 characters long
+            if (address.length === 62) {
+                return true;
+            }
+        }
+        // If it starts with bc1 but doesn't match the specific criteria, it's invalid.
+        return false;
+      }
+
+      // Testnet addresses (for completeness)
+      if (address.startsWith('tb1') || address.startsWith('m') || address.startsWith('n') || address.startsWith('2')) {
+        return true;
+      }
+
+      // If none of the above conditions are met, the address is invalid.
+      return false;
+    }
     async function verifySignature() {
       const signature = document.getElementById('signature-input').value.trim();
       if (!signature) {
@@ -435,7 +479,6 @@
       // document.getElementById('export-btn').disabled = percentage < 100;
       // document.getElementById('verify-all-btn').disabled = proofRows.length === 0;
       document.getElementById('finalize-btn').disabled = proofRows.length === 0;
-      document.getElementById('verify-all-btn').disabled = proofRows.length === 0;
     }
     
     function exportProof() {

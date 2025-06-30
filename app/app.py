@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify, send_from_directory, render_template,
 import requests
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 import logging
 from bitcoin_utils import BitcoinProofOfFunds
@@ -75,7 +75,7 @@ class PDF(FPDF):
         self.set_font('helvetica', 'I', 8)
         self.set_text_color(128)
         self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
-        self.cell(0, 10, f'Generated on {datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")}', 0, 0, 'R')
+        self.cell(0, 10, f'Generated on {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")}', 0, 0, 'R')
 
 # --- Web Pages ---
 @app.route('/')
@@ -91,56 +91,96 @@ def proof_record_page(proof_id):
 # --- API Endpoints ---
 @app.route('/proof/<proof_id>/pdf')
 def generate_proof_pdf(proof_id):
+    """
+    Generates a clear, lender-friendly PDF for the proof record.
+    """
     proof = ProofRecord.query.filter_by(proof_id=proof_id).first_or_404().to_dict()
     
     pdf = PDF('P', 'mm', 'A4')
     pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.set_font('helvetica', '', 10)
+
+    # --- Section 1: Summary ---
+    pdf.set_font('helvetica', 'B', 14)
+    pdf.cell(0, 10, 'Proof of Funds Summary', 0, 1, 'L')
     
-    pdf.set_font('helvetica', 'B', 12)
-    pdf.cell(0, 10, 'Proof Details', 0, 1)
+    col1_width = 45
+    col2_width = 0
+    line_height = 7
 
-    pdf.set_font('helvetica', '', 10)
-    pdf.cell(40, 8, 'Proof Name:', 0, 0)
     pdf.set_font('helvetica', 'B', 10)
-    pdf.cell(0, 8, str(proof['proof_name']), 0, 1)
-
+    pdf.cell(col1_width, line_height, 'Proof Name:', 0, 0)
     pdf.set_font('helvetica', '', 10)
-    pdf.cell(40, 8, 'Total Verified:', 0, 0)
+    pdf.cell(col2_width, line_height, str(proof['proof_name']), 0, 1)
+
+    pdf.set_font('helvetica', 'B', 10)
+    pdf.cell(col1_width, line_height, 'Total Verified Amount:', 0, 0)
     pdf.set_font('helvetica', 'B', 10)
     pdf.set_text_color(0, 100, 0)
-    pdf.cell(0, 8, f"{proof['total_amount']:.8f} BTC", 0, 1)
+    pdf.cell(col2_width, line_height, f"{proof['total_amount']:.8f} BTC", 0, 1)
     pdf.set_text_color(0)
-    
+
+    pdf.set_font('helvetica', 'B', 10)
+    pdf.cell(col1_width, line_height, 'Proof Generated On:', 0, 0)
     pdf.set_font('helvetica', '', 10)
-    pdf.cell(40, 8, 'Verified On:', 0, 0)
-    pdf.cell(0, 8, proof['timestamp'].strftime('%Y-%m-%d %H:%M:%S UTC'), 0, 1)
+    pdf.cell(col2_width, line_height, proof['timestamp'].strftime('%Y-%m-%d %H:%M:%S UTC'), 0, 1)
     
-    pdf.ln(5)
-    
-    pdf.set_font('helvetica', 'B', 12)
-    pdf.cell(0, 10, 'Signed Message', 0, 1)
-    pdf.set_font('courier', '', 8)
-    pdf.multi_cell(0, 5, proof['message'], border=1, padding=2)
-    pdf.ln(5)
+    pdf.ln(10)
 
-    pdf.set_font('helvetica', 'B', 12)
-    pdf.cell(0, 10, 'Verified Addresses', 0, 1)
-    
-    pdf.set_font('helvetica', 'B', 9)
-    pdf.cell(80, 8, 'Address', 1)
-    pdf.cell(40, 8, 'Balance (BTC)', 1)
-    pdf.cell(70, 8, 'Signature (truncated)', 1)
-    pdf.ln()
+    # --- Section 2: Detailed Address Proofs ---
+    pdf.set_font('helvetica', 'B', 14)
+    pdf.cell(0, 10, 'Detailed Address Verification', 0, 1, 'L')
 
-    pdf.set_font('courier', '', 7)
-    for addr in proof['addresses']:
-        pdf.cell(80, 7, addr['address'], 1)
-        pdf.cell(40, 7, f"{addr['balance']:.8f}", 1, 0, 'R')
-        pdf.cell(70, 7, proof['signatures'][addr['address']][:30] + '...', 1)
-        pdf.ln()
+    messages = json.loads(proof['message'])
 
-    response = Response(pdf.output(dest='S').encode('latin-1'), mimetype='application/pdf')
-    response.headers['Content-Disposition'] = f'inline; filename=proof_{proof_id}.pdf'
+    for i, addr_info in enumerate(proof['addresses']):
+        address = addr_info['address']
+        balance = addr_info['balance']
+        message = messages[i] if i < len(messages) else ""
+        signature = proof['signatures'].get(address, "Signature not found")
+
+        pdf.set_font('helvetica', 'B', 11)
+        pdf.cell(0, 9, f"Proof for Address {i+1}", 0, 1, 'L')
+        
+        # We'll manually control the layout instead of using a single large box
+        
+        # Address
+        pdf.set_font('helvetica', 'B', 9)
+        pdf.cell(25, 8, 'Address:', 0, 0)
+        pdf.set_font('courier', '', 9)
+        pdf.cell(0, 8, address, 0, 1)
+        
+        # Balance
+        pdf.set_font('helvetica', 'B', 9)
+        pdf.cell(25, 8, 'Balance:', 0, 0)
+        pdf.set_font('courier', '', 9)
+        pdf.cell(0, 8, f"{balance:.8f} BTC", 0, 1)
+
+        # Message Signed
+        pdf.set_font('helvetica', 'B', 9)
+        pdf.cell(0, 8, 'Message Signed:', 0, 1)
+        pdf.set_font('courier', '', 8)
+        # CORRECTED: Removed invalid new_x and new_y arguments
+        pdf.multi_cell(0, 4, message, border=1)
+        # pdf.ln() is not strictly needed after multi_cell as it moves the cursor
+        
+        # Signature
+        pdf.set_font('helvetica', 'B', 9)
+        pdf.cell(0, 8, 'Verification Signature:', 0, 1)
+        pdf.set_font('courier', '', 7)
+        # CORRECTED: Removed invalid new_x and new_y arguments
+        pdf.multi_cell(0, 3, signature, border=1)
+        
+        pdf.ln(10) # Add space between each proof block
+        
+    # --- Output ---
+    # The .encode('latin-1') is needed by the Response object
+    response = Response(
+            pdf.output(dest='S').encode('latin-1'),
+            mimetype='application/pdf',
+            headers={'Content-Disposition': f'inline; filename=proof_{proof_id}.pdf'}
+        )
     return response
     
 @app.route('/api/verify-signature-only', methods=['POST'])

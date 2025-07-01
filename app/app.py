@@ -8,7 +8,7 @@ import logging
 from bitcoin_utils import BitcoinProofOfFunds
 from fpdf import FPDF
 import secrets
-import secrets  # <-- ADDED: Import the secrets library
+import re
 
 app = Flask(__name__)
 CORS(app)
@@ -40,6 +40,9 @@ class ProofRecord(db.Model):
     expiry_date = db.Column(db.DateTime, nullable=True)
     verified = db.Column(db.Boolean, default=False)
     delete_token = db.Column(db.String(64), unique=True, nullable=False)
+    block_height = db.Column(db.Integer, nullable=True)
+    btc_usd_rate = db.Column(db.Float, nullable=True)
+    total_usd_value = db.Column(db.Float, nullable=True)
 
     
     def to_dict(self):
@@ -53,7 +56,10 @@ class ProofRecord(db.Model):
             'signatures': json.loads(self.signatures),
             'timestamp': self.timestamp, # Return datetime object
             'expiry_date': self.expiry_date, # Return datetime object
-            'verified': self.verified
+            'verified': self.verified,
+            'block_height': self.block_height,
+            'btc_usd_rate': self.btc_usd_rate,
+            'total_usd_value': self.total_usd_value
         }
 
 # Create tables
@@ -99,6 +105,20 @@ def proof_record_page(proof_id):
 
 
 # --- API Endpoints ---
+@app.route('/api/market-data', methods=['GET'])
+def get_market_data():
+    """Endpoint to fetch current BTC price and block height."""
+    try:
+        usd_rate = BitcoinProofOfFunds.get_usd_rate()
+        block_height = BitcoinProofOfFunds.get_current_block_height()
+        return jsonify({
+            'usd_rate': usd_rate,
+            'block_height': block_height
+        })
+    except Exception as e:
+        logger.error(f"Error fetching market data: {str(e)}")
+        return jsonify({'error': 'Could not fetch market data'}), 500
+
 @app.route('/proof/<proof_id>/pdf')
 def generate_proof_pdf(proof_id):
     """
@@ -128,13 +148,26 @@ def generate_proof_pdf(proof_id):
     pdf.cell(col1_width, line_height, 'Total Verified Amount:', 0, 0)
     pdf.set_font('helvetica', 'B', 10)
     pdf.set_text_color(0, 100, 0)
-    pdf.cell(col2_width, line_height, f"{proof['total_amount']:.8f} BTC", 0, 1)
+    usd_value_str = f" (~${proof['total_usd_value']:,.2f} USD)" if proof.get('total_usd_value') else ""
+    pdf.cell(col2_width, line_height, f"{proof['total_amount']:.8f} BTC{usd_value_str}", 0, 1)
     pdf.set_text_color(0)
 
     pdf.set_font('helvetica', 'B', 10)
     pdf.cell(col1_width, line_height, 'Proof Generated On:', 0, 0)
     pdf.set_font('helvetica', '', 10)
     pdf.cell(col2_width, line_height, proof['timestamp'].strftime('%Y-%m-%d %H:%M:%S UTC'), 0, 1)
+
+    pdf.set_font('helvetica', 'B', 10)
+    pdf.cell(col1_width, line_height, 'Block Height at Verification:', 0, 0)
+    pdf.set_font('helvetica', '', 10)
+    pdf.cell(col2_width, line_height, str(proof.get('block_height', 'N/A')), 0, 1)
+
+    pdf.set_font('helvetica', 'B', 10)
+    pdf.cell(col1_width, line_height, 'Proof URL:', 0, 0)
+    pdf.set_font('helvetica', '', 10)
+    pdf.set_text_color(43, 108, 176) # Blue link color
+    pdf.cell(col2_width, line_height, f'https://{request.host}/proof/{proof_id}', 0, 1, link=f'https://{request.host}/proof/{proof_id}')
+    pdf.set_text_color(0)
 
     pdf.set_font('helvetica', 'B', 10)
     pdf.cell(col1_width, line_height, 'Expires On:', 0, 0)
@@ -319,10 +352,18 @@ def verify_proof():
             
             delete_token = secrets.token_urlsafe(32) # The new secret delete token
 
-            total_amount = sum([addr.get('balance', 0) for addr in addresses])
-            
-            # Extract all messages to save them
+            total_amount = validation_result.get('total_verified_balance_btc', 0)
+            total_usd_value = validation_result.get('total_verified_value_usd')
+            btc_usd_rate = validation_result.get('current_btc_usd_rate')
+
             all_messages = [addr.get('message', '') for addr in addresses]
+            
+            # Extract block height from the first valid message
+            block_height = None
+            if all_messages:
+                match = re.search(r"Block Height: (\d+)", all_messages[0])
+                if match:
+                    block_height = int(match.group(1))
 
             expiry_dt = None
             if expiry_date:
@@ -342,11 +383,13 @@ def verify_proof():
                 addresses=json.dumps(addresses),
                 total_amount=total_amount,
                 target_amount=target_amount,
-                # Store all messages as a JSON string in the message field
                 message=json.dumps(all_messages),
                 signatures=json.dumps(signatures),
                 expiry_date=expiry_dt,
-                verified=True
+                verified=True,
+                block_height=block_height,
+                btc_usd_rate=btc_usd_rate,
+                total_usd_value=total_usd_value
             )
             db.session.add(proof_record)
             db.session.commit()

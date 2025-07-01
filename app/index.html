@@ -18,11 +18,12 @@
   <section id="proof-form" class="w-full max-w-4xl bg-white shadow rounded-xl p-6 mb-6">
     <h2 class="font-semibold mb-4">📝 Proof Configuration</h2>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <div>
+      <div class="relative">
         <label class="block text-sm font-medium text-slate-700 mb-1">Target Amount (BTC)</label>
         <input id="target-btc" name="target_btc" type="number" step="0.00000001" min="0" required 
                placeholder="0.00000000"
                class="w-full rounded-lg border-slate-300 border-2 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-indigo-500" />
+        <div id="target-usd" class="absolute right-3 top-9 text-xs text-slate-500"></div>
       </div>
       <div>
         <label class="block text-sm font-medium text-slate-700 mb-1">Proof Name</label>
@@ -151,7 +152,7 @@
             <label class="block text-sm font-medium text-slate-700 mb-2">Paste signature here:</label>
             <textarea id="signature-input" 
                       placeholder="Paste the base64-encoded signature from your wallet here..." 
-                      class="w-full h-24 rounded-lg border-slate-300 px-3 py-2 font-mono text-xs resize-none focus:border-indigo-500 focus:ring-indigo-500"></textarea>
+                      class="w-full h-24 rounded-lg border-slate-300 border-2 px-3 py-2 font-mono text-xs resize-none focus:border-indigo-500 focus:ring-indigo-500"></textarea>
             <div class="text-xs text-slate-500 mt-1">The signature should be a base64-encoded string</div>
           </div>
           <div class="flex flex-col justify-end space-y-3">
@@ -181,14 +182,40 @@
     let currentProofId = null; // This now holds the secure token
     let proofRows = [];
     let totalBalance = 0;
+    let btcUsdRate = null;
 
     document.addEventListener('DOMContentLoaded', function() {
       const futureDate = new Date();
       futureDate.setDate(futureDate.getDate() + 30);
       document.getElementById('expiry-date').valueAsDate = futureDate;
       document.getElementById('target-btc').value = '1.00000000';
+      fetchMarketData();
       updateProgress();
     });
+
+    async function fetchMarketData() {
+        try {
+            const response = await fetch('/api/market-data');
+            if (!response.ok) throw new Error('Could not fetch market data');
+            const data = await response.json();
+            btcUsdRate = data.usd_rate;
+            updateTargetUSD();
+        } catch (error) {
+            console.error("Failed to fetch market data:", error);
+            document.getElementById('target-usd').textContent = 'Rate N/A';
+        }
+    }
+
+    function updateTargetUSD() {
+        const targetBtc = parseFloat(document.getElementById('target-btc').value);
+        const targetUsdEl = document.getElementById('target-usd');
+        if (btcUsdRate && !isNaN(targetBtc)) {
+            const usdValue = targetBtc * btcUsdRate;
+            targetUsdEl.textContent = `~${usdValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        } else {
+            targetUsdEl.textContent = '';
+        }
+    }
 
     async function addAddress() {
       const addressInput = document.getElementById('address-input');
@@ -560,6 +587,7 @@
     }
     
     document.getElementById('target-btc').addEventListener('input', updateProgress);
+    document.getElementById('target-btc').addEventListener('input', updateTargetUSD);
   </script>
 </body>
 </html>

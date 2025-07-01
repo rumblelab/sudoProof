@@ -5,6 +5,7 @@ import struct
 from datetime import datetime, timezone
 from typing import Optional, Union, List
 import logging
+import re
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -32,6 +33,7 @@ class BitcoinProofOfFunds:
 
     _BECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
     _BECH32M_CONST = 0x2bc830a3
+    
     
     @staticmethod
     def _parse_header_byte(h: int):                                                     
@@ -338,7 +340,43 @@ class BitcoinProofOfFunds:
         return cls._bech32_encode('bc', 1, x_coord, bech32m=True)
 
     # --- Other Utility and API Methods ---
-    
+
+    @staticmethod
+    def get_current_block_height(timeout: int = 10) -> Optional[int]:
+        """Get the current Bitcoin block height from Blockstream.info."""
+        try:
+            logger.info("Fetching current block height...")
+            response = requests.get('https://blockstream.info/api/blocks/tip/height', timeout=timeout)
+            if response.status_code == 200:
+                height = int(response.text)
+                logger.info(f"Current block height: {height}")
+                return height
+            logger.warning(f"Blockstream returned status {response.status_code} for block height.")
+        except requests.RequestException as e:
+            logger.warning(f"Blockstream request for block height failed: {e}")
+        except (ValueError, AttributeError) as e:
+            logger.error(f"Parsing block height failed: {e}")
+        return None
+
+    @staticmethod
+    def get_usd_rate(timeout: int = 10) -> Optional[float]:
+        """Get the current BTC to USD exchange rate from CoinGecko."""
+        try:
+            logger.info("Fetching BTC/USD exchange rate...")
+            url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"
+            response = requests.get(url, timeout=timeout)
+            if response.status_code == 200:
+                data = response.json()
+                rate = float(data['bitcoin']['usd'])
+                logger.info(f"Current BTC/USD rate: ${rate:,.2f}")
+                return rate
+            logger.warning(f"CoinGecko returned status {response.status_code} for USD rate.")
+        except requests.RequestException as e:
+            logger.warning(f"CoinGecko request for USD rate failed: {e}")
+        except (ValueError, KeyError, AttributeError) as e:
+            logger.error(f"Parsing USD rate failed: {e}")
+        return None
+
     @staticmethod
     def _verify_signature_fallback(address: str, signature: str, message: str) -> bool:
         """Fallback verification when ECDSA library is not available"""
@@ -366,40 +404,59 @@ class BitcoinProofOfFunds:
 
     @staticmethod
     def create_proof_message(
-        addresses: list, 
-        amount: Union[int, float], 
-        proof_name: Optional[str] = None, 
-        timestamp: Optional[str] = None
+        addresses: list,
+        amount: Union[int, float],
+        proof_name: Optional[str] = None,
+        timestamp: Optional[str] = None,
+        block_height: Optional[int] = None
     ) -> str:
-        """Create a standardized proof of funds message, optionally including a proof name."""
+        """Create a standardized proof of funds message, including block height and USD value."""
         if timestamp is None:
-            # Use timezone-aware UTC datetime to avoid DeprecationWarning
             timestamp = datetime.now(timezone.utc).isoformat()
-        
+
+        if block_height is None:
+            block_height = BitcoinProofOfFunds.get_current_block_height()
+
+        usd_rate = BitcoinProofOfFunds.get_usd_rate()
         amount_str = f"{float(amount):.8f}"
-        
-        # Start with the purpose of the proof, making it more specific
+        usd_value_str = "N/A"
+        if usd_rate is not None:
+            usd_value = float(amount) * usd_rate
+            usd_value_str = f"${usd_value:,.2f} USD"
+
         message_lines = []
         if proof_name and proof_name.strip():
             message_lines.append(f"Proof of Funds For: {proof_name.strip()}")
         else:
             message_lines.append("Proof of Funds")
-            
+
         message_lines.extend([
             f"Timestamp: {timestamp}",
-            f"Total Amount: {amount_str} BTC",
+            f"Block Height: {block_height if block_height else 'N/A'}",
+            f"Total Amount: {amount_str} BTC (~{usd_value_str})",
             "Addresses:"
         ] + [f"- {addr}" for addr in addresses])
-        
+
         return "\n".join(message_lines)
 
     @staticmethod
-    def get_address_balance(address: str, timeout: int = 10) -> float:
-        """Get real balance for a Bitcoin address using multiple API sources."""
+    def get_address_balance(address: str, block_height: Optional[int] = None, timeout: int = 10) -> float:
+        """
+        Get balance for a Bitcoin address. If block_height is provided, it gets the
+        balance at that specific block height (more secure). Otherwise, it gets the current balance.
+        """
         if not BitcoinProofOfFunds._is_valid_address_format(address):
             logger.warning(f"Invalid address format for balance check: {address}")
             return 0.0
-        
+
+        if block_height:
+            return BitcoinProofOfFunds._get_balance_at_height(address, block_height, timeout)
+        else:
+            return BitcoinProofOfFunds._get_current_balance(address, timeout)
+
+    @staticmethod
+    def _get_current_balance(address: str, timeout: int) -> float:
+        """Get the current balance from multiple API sources."""
         apis = [
             {'name': 'Blockchain.info', 'url': f'https://blockchain.info/q/addressbalance/{address}', 'parser': BitcoinProofOfFunds._parse_blockchain_info_response},
             {'name': 'Blockstream', 'url': f'https://blockstream.info/api/address/{address}', 'parser': BitcoinProofOfFunds._parse_blockstream_response}
@@ -407,12 +464,12 @@ class BitcoinProofOfFunds:
         
         for api in apis:
             try:
-                logger.info(f"Fetching balance from {api['name']} for {address[:10]}...")
+                logger.info(f"Fetching current balance from {api['name']} for {address[:10]}...")
                 response = requests.get(api['url'], timeout=timeout)
                 if response.status_code == 200:
                     balance = api['parser'](response)
                     if balance is not None:
-                        logger.info(f"Balance retrieved: {balance:.8f} BTC")
+                        logger.info(f"Current balance retrieved: {balance:.8f} BTC")
                         return balance
                 else:
                     logger.warning(f"{api['name']} returned status {response.status_code}")
@@ -421,8 +478,56 @@ class BitcoinProofOfFunds:
             except Exception as e:
                 logger.error(f"{api['name']} parsing failed: {e}")
         
-        logger.error(f"All APIs failed for address {address[:10]}...")
+        logger.error(f"All APIs failed for current balance of {address[:10]}...")
         return 0.0
+
+    @staticmethod
+    def _get_balance_at_height(address: str, block_height: int, timeout: int) -> float:
+        """Get the balance of an address at a specific block height using Blockstream API."""
+        try:
+            logger.info(f"Fetching UTXOs for {address[:10]} at block height {block_height}...")
+            response = requests.get(f'https://blockstream.info/api/address/{address}/utxo', timeout=timeout)
+            if response.status_code != 200:
+                logger.warning(f"Blockstream returned status {response.status_code} for UTXOs.")
+                return 0.0
+            
+            utxos = response.json()
+            balance_sats = 0
+            for utxo in utxos:
+                # UTXO was confirmed at or before the target block height
+                if utxo['status']['block_height'] and utxo['status']['block_height'] <= block_height:
+                    # Now, check if it was spent, and if so, *when* it was spent
+                    if utxo.get('status', {}).get('spent'):
+                        # We need to fetch the spending transaction's block height
+                        spending_tx_height = BitcoinProofOfFunds._get_tx_block_height(utxo['txid'], timeout)
+                        if spending_tx_height and spending_tx_height > block_height:
+                            # The UTXO was spent *after* our target block, so it was unspent at the time.
+                            balance_sats += utxo['value']
+                    else:
+                        # Unspent, so it counts towards the balance.
+                        balance_sats += utxo['value']
+
+            balance_btc = balance_sats / 100_000_000
+            logger.info(f"Balance at height {block_height} for {address[:10]}: {balance_btc:.8f} BTC")
+            return balance_btc
+
+        except requests.RequestException as e:
+            logger.warning(f"Blockstream request for historical balance failed: {e}")
+        except (ValueError, KeyError, AttributeError) as e:
+            logger.error(f"Parsing historical balance failed: {e}")
+        
+        return 0.0
+
+    @staticmethod
+    def _get_tx_block_height(txid: str, timeout: int) -> Optional[int]:
+        """Helper to get the block height of a specific transaction."""
+        try:
+            response = requests.get(f'https://blockstream.info/api/tx/{txid}', timeout=timeout)
+            if response.status_code == 200:
+                return response.json().get('status', {}).get('block_height')
+        except Exception:
+            return None
+        return None
 
     @staticmethod
     def _parse_blockchain_info_response(response) -> Optional[float]:
@@ -441,20 +546,21 @@ class BitcoinProofOfFunds:
             return None
     
     @staticmethod
-    def validate_proof_data(addresses: list, signatures: dict) -> dict: # <-- REMOVED message from arguments
+    def validate_proof_data(addresses: list, signatures: dict) -> dict:
         """
-        Validate a complete proof submission. Each address object in the list
-        is expected to contain its own 'message' key.
+        Validate a complete proof submission. It now re-verifies the balance at the
+        block height specified in the signed message for maximum security.
         """
         results = {}
         all_valid = True
+        total_valid_balance = 0.0
         warnings = []
         if not ECDSA_AVAILABLE:
             warnings.append("⚠️ Using format validation only - install 'ecdsa' for full cryptographic verification")
         
         for addr_data in addresses:
             address = addr_data.get('address')
-            message = addr_data.get('message') # <-- GET message from the address object
+            message = addr_data.get('message')
             if not address: continue
             
             signature = signatures.get(address, '').strip()
@@ -464,29 +570,54 @@ class BitcoinProofOfFunds:
                 all_valid = False
                 continue
             
-            if not message: # <-- ADDED check for message
+            if not message:
                 results[address] = {'valid': False, 'error': 'No message provided for this address'}
                 all_valid = False
                 continue
 
+            # First, verify the signature is cryptographically valid for the message
             is_valid = BitcoinProofOfFunds.verify_message_signature(address, signature, message)
-            results[address] = {
-                'valid': is_valid,
-                'balance': addr_data.get('balance', 0),
-                'address_type': BitcoinProofOfFunds._get_address_type(address),
-                'verification_method': 'cryptographic' if ECDSA_AVAILABLE else 'format_only'
-            }
             if not is_valid:
                 all_valid = False
-                results[address]['error'] = 'Cryptographic signature verification failed'
+                results[address] = {
+                    'valid': False, 'balance': 0, 'error': 'Cryptographic signature verification failed'
+                }
+                continue
+
+            # --- SECURE BALANCE VERIFICATION ---
+            # If signature is valid, extract block height and re-verify balance at that point in time.
+            block_height_match = re.search(r"Block Height: (\d+)", message)
+            if not block_height_match:
+                all_valid = False
+                results[address] = {'valid': False, 'balance': 0, 'error': 'Block height not found in signed message'}
+                continue
+            
+            block_height = int(block_height_match.group(1))
+            
+            # This is the critical step: get the balance at the specific block height
+            verified_balance = BitcoinProofOfFunds.get_address_balance(address, block_height=block_height)
+            total_valid_balance += verified_balance
+            
+            results[address] = {
+                'valid': True,
+                'balance': verified_balance, # Use the re-verified balance
+                'address_type': BitcoinProofOfFunds._get_address_type(address),
+                'verification_method': 'cryptographic_point_in_time' if ECDSA_AVAILABLE else 'format_only'
+            }
         
+        usd_rate = BitcoinProofOfFunds.get_usd_rate()
+        total_usd_value = total_valid_balance * usd_rate if usd_rate else None
+
         return {
             'valid': all_valid,
             'results': results,
             'total_addresses': len(addresses),
             'valid_signatures': sum(1 for r in results.values() if r.get('valid')),
+            'total_verified_balance_btc': total_valid_balance,
+            'current_btc_usd_rate': usd_rate,
+            'total_verified_value_usd': total_usd_value,
             'warnings': warnings,
-            'verification_level': 'cryptographic' if ECDSA_AVAILABLE else 'format_only'
+            'verification_level': 'cryptographic_point_in_time' if ECDSA_AVAILABLE else 'format_only'
         }
     
     @staticmethod

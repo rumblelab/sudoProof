@@ -15,13 +15,18 @@
       <p class="text-lg text-slate-600">This document verifies control over the listed Bitcoin assets.</p>
     </header>
 
-    <div class="p-4 rounded-lg {% if proof.total_amount >= proof.target_amount %} bg-emerald-50 border-emerald-200 {% else %} bg-amber-50 border-amber-200 {% endif %}">
-      <div class="font-bold text-xl {% if proof.total_amount >= proof.target_amount %} text-emerald-800 {% else %} text-amber-800 {% endif %}">
-        {% if proof.total_amount >= proof.target_amount %}
-          ✅ Verification Target Reached
-        {% else %}
-          ⚠️ Verification Target Not Reached
-        {% endif %}
+    <div class="p-4 rounded-lg {% if proof.total_amount >= proof.target_amount %} bg-emerald-50 border-emerald-200 {% else %} bg-amber-50 border-amber-200 {% endif %} border">
+      <div class="font-bold text-xl {% if proof.total_amount >= proof.target_amount %} text-emerald-800 {% else %} text-amber-800 {% endif %} flex justify-between items-center">
+        <span>
+            {% if proof.total_amount >= proof.target_amount %}
+              ✅ Verification Target Reached
+            {% else %}
+              ⚠️ Verification Target Not Reached
+            {% endif %}
+        </span>
+        <span class="text-sm font-normal text-slate-500">
+            Target: {{ "%.8f"|format(proof.target_amount) }} BTC
+        </span>
       </div>
     </div>
 
@@ -32,11 +37,20 @@
       </div>
       <div>
         <div class="text-sm font-medium text-slate-500">Total Verified Amount</div>
-        <div class="text-lg font-mono text-emerald-700 font-bold">{{ "%.8f"|format(proof.total_amount) }} BTC</div>
+        <div class="text-lg font-mono text-emerald-700 font-bold">
+            {{ "%.8f"|format(proof.total_amount) }} BTC
+            {% if proof.total_usd_value %}
+                <span class="text-base text-slate-500 font-normal">(~${{ "%.2f"|format(proof.total_usd_value) }} USD)</span>
+            {% endif %}
+        </div>
       </div>
       <div>
         <div class="text-sm font-medium text-slate-500">Verified On</div>
         <div class="text-lg text-slate-600">{{ proof.timestamp.strftime('%Y-%m-%d %H:%M:%S UTC') }}</div>
+      </div>
+       <div>
+        <div class="text-sm font-medium text-slate-500">Block Height at Verification</div>
+        <div class="text-lg text-slate-600">{{ proof.block_height if proof.block_height else 'N/A' }}</div>
       </div>
       <div>
         <div class="text-sm font-medium text-slate-500">Expires On</div>
@@ -59,9 +73,26 @@
                     <div class="text-xs font-medium text-slate-500">ADDRESS</div>
                     <div class="font-mono text-sm text-slate-900 break-words">{{ address_info.address }}</div>
                 </div>
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <div class="text-xs font-medium text-slate-500">VERIFIED BALANCE (AT BLOCK {{ proof.block_height }})</div>
+                        <div class="font-mono text-sm text-slate-900">{{ "%.8f"|format(address_info.balance) }} BTC</div>
+                    </div>
+                    <div id="live-balance-{{ i }}" class="hidden">
+                        <div class="text-xs font-medium text-slate-500">CURRENT BALANCE</div>
+                        <div class="font-mono text-sm text-slate-900"></div>
+                    </div>
+                </div>
+
                 <div>
-                    <div class="text-xs font-medium text-slate-500">BALANCE</div>
-                    <div class="font-mono text-sm text-slate-900">{{ "%.8f"|format(address_info.balance) }} BTC</div>
+                    <button 
+                        onclick="checkLiveBalance(this)" 
+                        data-address="{{ address_info.address }}"
+                        data-index="{{ i }}"
+                        class="text-xs bg-white border border-slate-300 rounded-md px-2 py-1 hover:bg-slate-50 transition-colors">
+                        Check Current Balance
+                    </button>
                 </div>
 
                 <div>
@@ -122,6 +153,31 @@
         console.error('Failed to copy URL: ', err);
         alert('Failed to copy URL. Please copy it manually from the address bar.');
       });
+    }
+
+    async function checkLiveBalance(button) {
+        const address = button.dataset.address;
+        const index = button.dataset.index;
+        
+        button.textContent = 'Checking...';
+        button.disabled = true;
+
+        try {
+            const response = await fetch(`/api/address-balance/${address}`);
+            if (!response.ok) throw new Error('Failed to fetch');
+            const data = await response.json();
+            
+            const liveBalanceContainer = document.getElementById(`live-balance-${index}`);
+            const balanceEl = liveBalanceContainer.querySelector('div:last-child');
+            balanceEl.textContent = `${data.balance.toFixed(8)} BTC`;
+            liveBalanceContainer.classList.remove('hidden');
+            button.style.display = 'none'; // Hide button after successful check
+
+        } catch (error) {
+            console.error("Error checking live balance:", error);
+            button.textContent = 'Error! Retry';
+            button.disabled = false;
+        }
     }
   </script>
 </body>

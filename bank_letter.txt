@@ -1,0 +1,11 @@
+"To Whom It May Concern,
+
+In addition to the attached statements from Coinbase, I also hold 5.1 BTC in a self-custodied wallet for which no third-party institution can provide a statement.
+
+To prove my ownership of these assets, I have provided a cryptographic proof of funds. This document contains a list of my Bitcoin addresses and a cryptographic signature that proves my exclusive control over them.
+
+You can view and re-verify the authenticity of this proof at the following secure link: https://your-app.com/proof/abc123xyz. The verification process uses established Bitcoin cryptographic standards.
+
+Sincerely,
+
+John Doe"

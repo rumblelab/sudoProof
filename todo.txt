@@ -1,0 +1,22 @@
+generate webhook
+block height
+conversion rate
+tooltips for expiry and jargony terms like address types
+send pdf, email pdf option. 
+empire flippers can send a link. 
+add message in email form. 
+set up a node
+add expiration/auto deletion
+
+add bip 322
+
+done
+add bip 137
+
+http://localhost:3000/proof/delete/toxTUbYL0VBA0iFiU9-zJTHYhS0sYAWSQZ6QVSRejCc
+
+http://localhost:3000/proof/ax8JZFrwtzga8VAc-6TSLNkDWRPRdJVMo4ex1Z3shsY
+
+http://localhost:3000/proof/delete/DRZFToBKTxq8Duh-qnOvkFd7dT1MDElXwiZlb4j45fU
+
+http://localhost:3000/proof/delete/nia6xWm6B1QqxcO3R2vnWwiPgJwIesYFz7yv2FCWeYI

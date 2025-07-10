@@ -2,3 +2,5 @@ venv/
 /todo.txt
 __pycache__
 instance/proofs.db
+bank_letter.txt
+howto.txt

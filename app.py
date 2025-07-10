@@ -9,6 +9,7 @@ from bitcoin_utils import BitcoinProofOfFunds
 from fpdf import FPDF
 import secrets
 import re
+print('yoooooooooooo')
 
 app = Flask(__name__)
 CORS(app)

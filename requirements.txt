@@ -10,4 +10,3 @@ ecdsa==0.18.0
 requests==2.31.0
 fpdf2==2.7.9
 secrets==1.0.2
-pyOpenSSL==23.2.0

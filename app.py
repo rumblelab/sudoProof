@@ -167,7 +167,7 @@ def generate_proof_pdf(proof_id):
     pdf.cell(col1_width, line_height, 'Proof URL:', 0, 0)
     pdf.set_font('helvetica', '', 10)
     pdf.set_text_color(43, 108, 176) # Blue link color
-    pdf.cell(col2_width, line_height, f'https://{request.host}/proof/{proof_id}', 0, 1, link=f'https://{request.host}/proof/{proof_id}')
+    pdf.cell(col2_width, line_height, f'https://{app.proofstub.com}/proof/{proof_id}', 0, 1, link=f'https://{request.host}/proof/{proof_id}')
     pdf.set_text_color(0)
 
     pdf.set_font('helvetica', 'B', 10)
@@ -210,7 +210,7 @@ def generate_proof_pdf(proof_id):
         pdf.cell(0, 8, 'Message Signed:', 0, 1)
         pdf.set_font('courier', '', 8)
         pdf.multi_cell(0, 4, message, border=1)
-        
+        pdf.ln(2)  # Add some space after the message
         # Signature
         pdf.set_font('helvetica', 'B', 9)
         pdf.cell(0, 8, 'Verification Signature:', 0, 1)

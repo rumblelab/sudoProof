@@ -193,8 +193,6 @@ def generate_proof_pdf(proof_id):
         pdf.set_font('helvetica', 'B', 11)
         pdf.cell(0, 9, f"Proof for Address {i+1}", 0, 1, 'L')
         
-        # We'll manually control the layout instead of using a single large box
-        
         # Address
         pdf.set_font('helvetica', 'B', 9)
         pdf.cell(25, 8, 'Address:', 0, 0)
@@ -211,21 +209,20 @@ def generate_proof_pdf(proof_id):
         pdf.set_font('helvetica', 'B', 9)
         pdf.cell(0, 8, 'Message Signed:', 0, 1)
         pdf.set_font('courier', '', 8)
-        # CORRECTED: Removed invalid new_x and new_y arguments
         pdf.multi_cell(0, 4, message, border=1)
-        # pdf.ln() is not strictly needed after multi_cell as it moves the cursor
         
         # Signature
         pdf.set_font('helvetica', 'B', 9)
         pdf.cell(0, 8, 'Verification Signature:', 0, 1)
         pdf.set_font('courier', '', 7)
-        # CORRECTED: Removed invalid new_x and new_y arguments
         pdf.multi_cell(0, 3, signature, border=1)
         
-        pdf.ln(10) # Add space between each proof block
+        pdf.ln(10) 
         
+    # --- Output ---
+    # Convert the bytearray from pdf.output() into a bytes object.
     response = Response(
-            pdf.output(dest='S'), # <-- FIX IS HERE
+            bytes(pdf.output(dest='S')), # <-- FIX IS HERE
             mimetype='application/pdf',
             headers={'Content-Disposition': f'inline; filename=proof_{proof_id}.pdf'}
         )

@@ -205,12 +205,15 @@ def generate_proof_pdf(proof_id):
         pdf.set_font('courier', '', 9)
         pdf.cell(0, 8, f"{balance:.8f} BTC", 0, 1)
 
-        # Message Signed
+   # Message Signed
         pdf.set_font('helvetica', 'B', 9)
         pdf.cell(0, 8, 'Message Signed:', 0, 1)
         pdf.set_font('courier', '', 8)
         pdf.multi_cell(0, 4, message, border=1)
-        pdf.ln(2)  # Add some space after the message
+        
+        # Add a small line break to reset the cursor's X position
+        pdf.ln(2) 
+        
         # Signature
         pdf.set_font('helvetica', 'B', 9)
         pdf.cell(0, 8, 'Verification Signature:', 0, 1)

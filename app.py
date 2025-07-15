@@ -224,10 +224,8 @@ def generate_proof_pdf(proof_id):
         
         pdf.ln(10) # Add space between each proof block
         
-    # --- Output ---
-    # The .encode('latin-1') is needed by the Response object
     response = Response(
-            pdf.output(dest='S').encode('latin-1'),
+            pdf.output(dest='S'), # <-- FIX IS HERE
             mimetype='application/pdf',
             headers={'Content-Disposition': f'inline; filename=proof_{proof_id}.pdf'}
         )
